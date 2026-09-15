@@ -100,12 +100,12 @@ let verify conn =
     Ptime.of_rfc3339 "2026-09-13T12:34:56Z" |> Result.ok |> Option.value_exn
     |> fun (t, _, _) -> t
   in
-  let article author_id =
+  let article ~id ~slug author_id =
     Insert.(
       into Articles.table
-      |> set Articles.id_column 1L
+      |> set Articles.id_column id
       |> set Articles.author_id_column author_id
-      |> set Articles.slug_column "generated-schema"
+      |> set Articles.slug_column slug
       |> set Articles.title_column "Generated schema"
       |> set Articles.description_column "A typed SQL integration test"
       |> set Articles.body_column "Content survives schema upgrades."
@@ -113,9 +113,12 @@ let verify conn =
       |> set Articles.updated_at_column now
       |> command)
   in
-  let%bind invalid_author = Adapter.execute ~conn (article 999L) in
+  let%bind invalid_author =
+    Adapter.execute ~conn (article ~id:1L ~slug:"generated-schema" 999L)
+  in
   expect_constraint `Foreign_key invalid_author;
-  let%bind () = execute ~conn (article 1L) in
+  let%bind () = execute ~conn (article ~id:1L ~slug:"generated-schema" 1L) in
+  let%bind () = execute ~conn (article ~id:2L ~slug:"other-article" 2L) in
   let%bind selected =
     Adapter.fetch_one
       ~conn
@@ -182,11 +185,30 @@ let verify conn =
         |> set Comments.updated_at_column now
         |> command)
   in
+  let%bind () =
+    execute
+      ~conn
+      Insert.(
+        into Comments.table
+        |> set Comments.article_id_column 2L
+        |> set Comments.author_id_column 2L
+        |> set Comments.body_column "A comment on another article"
+        |> set Comments.created_at_column now
+        |> set Comments.updated_at_column now
+        |> command)
+  in
+  let%bind article_comments =
+    Adapter.fetch ~conn (Realworld_sqlite.Comment_queries.by_article 1L)
+  in
+  let article_comments = or_fail article_comments in
+  assert (Int.equal (List.length article_comments) 1);
+  assert (String.equal (List.hd_exn article_comments).body "A comment");
   let joined =
     Query.(
       from Articles.table
       |> inner_join Users.table ~on:(fun article user ->
         Articles.author_id article =. Users.id user)
+      |> where (fun (article, _) -> Articles.id article =$ 1L)
       |> select (fun (article, user) ->
         Projection.pair (Articles.title article) (Users.username user)))
   in
@@ -229,6 +251,11 @@ let verify conn =
     execute
       ~conn
       Delete.(from Articles.table |> where (fun row -> Articles.id row =$ 1L) |> command)
+  in
+  let%bind () =
+    execute
+      ~conn
+      Delete.(from Articles.table |> where (fun row -> Articles.id row =$ 2L) |> command)
   in
   let%bind comments =
     Adapter.fetch ~conn Query.(from Comments.table |> select Comments.projection)

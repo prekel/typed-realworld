@@ -13,6 +13,15 @@ let article_by_slug slug =
 
 let all () = Query.(from Comments.table |> select Comments.projection)
 
+let by_article article_id =
+  Query.(
+    from Comments.table
+    |> where (fun comment -> Comments.article_id comment =$ article_id)
+    |> order_by (fun comment -> Comments.created_at comment) `Asc
+    |> order_by (fun comment -> Comments.id comment) `Asc
+    |> select Comments.projection)
+;;
+
 let by_article_and_id ~article_id ~comment_id =
   Query.(
     from Comments.table

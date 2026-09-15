@@ -21,40 +21,45 @@ let comment_of_row ~viewer_id ~all_users ~all_follows row =
         }
 ;;
 
+let hydrate_comments ~conn ~viewer_id rows =
+  let author_ids =
+    rows
+    |> List.map ~f:(fun row -> row.Comments.author_id)
+    |> List.dedup_and_sort ~compare:Int64.compare
+  in
+  let%bind found_users = fetch ~conn (User_queries.rows_by_ids author_ids) in
+  match found_users with
+  | Error _ as error -> Lwt.return error
+  | Ok all_users ->
+    let%bind all_follows =
+      match viewer_id with
+      | None -> Lwt.return (Ok [])
+      | Some viewer_id ->
+        fetch ~conn (User_queries.follows_for_authors ~viewer_id author_ids)
+    in
+    (match all_follows with
+     | Error _ as error -> Lwt.return error
+     | Ok all_follows ->
+       let hydrated =
+         rows
+         |> List.map ~f:(comment_of_row ~viewer_id ~all_users ~all_follows)
+         |> Result.all
+       in
+       Lwt.return hydrated)
+;;
+
 let list ~conn ~viewer_id ~slug =
   let%bind article = article_by_slug ~conn slug in
   match article with
   | Error error -> Lwt.return (Error (`Persistence error))
   | Ok None -> Lwt.return (Error `Article_not_found)
   | Ok (Some article) ->
-    let%bind all_comments = comments ~conn in
-    (match all_comments with
+    let%bind listed = Comment_queries.by_article article.id |> fetch ~conn in
+    (match listed with
      | Error error -> Lwt.return (Error (`Persistence error))
-     | Ok all_comments ->
-       let%bind all_users = users ~conn in
-       (match all_users with
-        | Error error -> Lwt.return (Error (`Persistence error))
-        | Ok all_users ->
-          let%bind all_follows = follows ~conn in
-          (match all_follows with
-           | Error error -> Lwt.return (Error (`Persistence error))
-           | Ok all_follows ->
-             let listed =
-               all_comments
-               |> List.filter ~f:(fun comment ->
-                 Int64.equal comment.Comments.article_id article.id)
-               |> List.sort ~compare:(fun left right ->
-                 let order =
-                   Ptime.compare left.Comments.created_at right.Comments.created_at
-                 in
-                 if Int.equal order 0 then
-                   Int64.compare left.Comments.id right.Comments.id
-                 else
-                   order)
-               |> List.map ~f:(comment_of_row ~viewer_id ~all_users ~all_follows)
-               |> Result.all
-             in
-             Lwt.return (Result.map_error listed ~f:(fun error -> `Persistence error)))))
+     | Ok rows ->
+       let%map hydrated = hydrate_comments ~conn ~viewer_id rows in
+       Result.map_error hydrated ~f:(fun error -> `Persistence error))
 ;;
 
 let create ~conn ~author_id ~slug ~body ~now =
@@ -68,19 +73,9 @@ let create ~conn ~author_id ~slug ~body ~now =
     (match inserted with
      | Error error -> Lwt.return (Error (`Persistence error))
      | Ok row ->
-       let%bind all_users = users ~conn in
-       (match all_users with
-        | Error error -> Lwt.return (Error (`Persistence error))
-        | Ok all_users ->
-          let%map all_follows = follows ~conn in
-          (match all_follows with
-           | Error error -> Error (`Persistence error)
-           | Ok all_follows ->
-             (match
-                comment_of_row ~viewer_id:(Some author_id) ~all_users ~all_follows row
-              with
-              | Ok comment -> Ok comment
-              | Error error -> Error (`Persistence error)))))
+       let%map hydrated = hydrate_comments ~conn ~viewer_id:(Some author_id) [ row ] in
+       Result.map hydrated ~f:List.hd_exn
+       |> Result.map_error ~f:(fun error -> `Persistence error))
 ;;
 
 let delete ~conn ~author_id ~slug ~comment_id =

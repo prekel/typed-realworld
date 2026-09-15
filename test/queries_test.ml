@@ -212,6 +212,9 @@ let%expect_test "comment queries compile" =
   Stdlib.print_endline (compile_exn Dialect.Sqlite (Comment_queries.all ()));
   [%expect
     {| SELECT t0."id", t0."article_id", t0."author_id", t0."body", t0."created_at", t0."updated_at" FROM "comments" AS t0 |}];
+  Stdlib.print_endline (compile_exn Dialect.Sqlite (Comment_queries.by_article 101L));
+  [%expect
+    {| SELECT t0."id", t0."article_id", t0."author_id", t0."body", t0."created_at", t0."updated_at" FROM "comments" AS t0 WHERE (t0."article_id" = ?1) ORDER BY t0."created_at" ASC, t0."id" ASC |}];
   Stdlib.print_endline
     (compile_exn
        Dialect.Sqlite
