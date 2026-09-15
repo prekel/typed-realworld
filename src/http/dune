@@ -1,0 +1,21 @@
+(library
+ (name realworld_http)
+ (public_name typed-realworld.http)
+ (private_modules
+  article_controller
+  comment_controller
+  controller_context
+  dto
+  user_controller)
+ (libraries
+  base
+  cohttp
+  lwt
+  opium
+  ppx_deriving_jsonschema.runtime
+  realworld_application
+  realworld_domain
+  typed-endpoint
+  yojson)
+ (preprocess
+  (pps ppx_let ppx_deriving_yojson ppx_deriving_jsonschema)))

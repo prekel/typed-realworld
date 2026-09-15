@@ -1,0 +1,26 @@
+# OCaml compiler output
+*.annot
+*.cmo
+*.cma
+*.cmi
+*.a
+*.o
+*.cmx
+*.cmxs
+*.cmxa
+
+# Dune output
+_build/
+*.install
+
+# Local opam switch and runtime data
+_opam/
+.tools/
+.env
+realworld.sqlite3
+realworld.sqlite3-shm
+realworld.sqlite3-wal
+
+# Editor state
+.merlin
+.vscode/

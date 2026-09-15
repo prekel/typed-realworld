@@ -1,0 +1,13 @@
+(executable
+ (name schema_snapshot)
+ (modules schema_snapshot)
+ (libraries
+  base
+  caqti-lwt.unix
+  caqti-driver-sqlite3
+  lwt.unix
+  typed-sql
+  typed-sql-caqti-lwt
+  uri)
+ (preprocess
+  (pps ppx_let)))

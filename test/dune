@@ -1,0 +1,46 @@
+(test
+ (name security_test)
+ (modules security_test)
+ (libraries base mirage-crypto-rng.unix realworld_domain realworld_security))
+
+(library
+ (name queries_test)
+ (modules queries_test)
+ (libraries base ptime realworld_domain realworld_sqlite typed-sql)
+ (inline_tests)
+ (preprocess
+  (pps ppx_expect)))
+
+(executable
+ (name schema_integration_test)
+ (modules schema_integration_test)
+ (libraries
+  base
+  caqti-lwt.unix
+  caqti-driver-sqlite3
+  lwt.unix
+  ptime
+  realworld_sqlite
+  realworld_domain
+  typed-sql
+  typed-sql-caqti-lwt
+  uri)
+ (preprocess
+  (pps ppx_let)))
+
+(rule
+ (alias runtest)
+ (deps
+  (env_var DBMATE_BIN)
+  migrations_test.sh
+  (source_tree fixtures)
+  (source_tree ../db/migrations/sqlite)
+  ../db/schema.json
+  ../scripts/dbmate-version)
+ (action
+  (run
+   bash
+   %{dep:migrations_test.sh}
+   %{workspace_root}
+   %{exe:schema_integration_test.exe}
+   %{exe:../tools/schema_snapshot.exe})))

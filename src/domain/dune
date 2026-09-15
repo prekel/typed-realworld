@@ -1,0 +1,5 @@
+(library
+ (name realworld_domain)
+ (public_name typed-realworld.domain)
+ (modules domain)
+ (libraries base ptime))

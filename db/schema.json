@@ -1,0 +1,366 @@
+{
+  "version": 1,
+  "tables": [
+    {
+      "schema": null,
+      "name": "article_tags",
+      "columns": [
+        {
+          "name": "article_id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": 1
+        },
+        {
+          "name": "tag_id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": 2
+        },
+        {
+          "name": "position",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [ "tag_id" ],
+          "referenced_schema": null,
+          "referenced_table": "tags",
+          "referenced_columns": [ "id" ]
+        },
+        {
+          "columns": [ "article_id" ],
+          "referenced_schema": null,
+          "referenced_table": "articles",
+          "referenced_columns": [ "id" ]
+        }
+      ],
+      "unique_constraints": [
+        {
+          "name": "sqlite_autoindex_article_tags_2",
+          "columns": [ "article_id", "position" ]
+        }
+      ]
+    },
+    {
+      "schema": null,
+      "name": "articles",
+      "columns": [
+        {
+          "name": "id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": 1
+        },
+        {
+          "name": "author_id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "slug",
+          "db_type": { "kind": "text" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "title",
+          "db_type": { "kind": "text" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "description",
+          "db_type": { "kind": "text" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "body",
+          "db_type": { "kind": "text" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "created_at",
+          "db_type": { "kind": "timestamp" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "updated_at",
+          "db_type": { "kind": "timestamp" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [ "author_id" ],
+          "referenced_schema": null,
+          "referenced_table": "users",
+          "referenced_columns": [ "id" ]
+        }
+      ],
+      "unique_constraints": [
+        { "name": "sqlite_autoindex_articles_1", "columns": [ "slug" ] }
+      ]
+    },
+    {
+      "schema": null,
+      "name": "comments",
+      "columns": [
+        {
+          "name": "id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": 1
+        },
+        {
+          "name": "article_id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "author_id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "body",
+          "db_type": { "kind": "text" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "created_at",
+          "db_type": { "kind": "timestamp" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "updated_at",
+          "db_type": { "kind": "timestamp" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [ "author_id" ],
+          "referenced_schema": null,
+          "referenced_table": "users",
+          "referenced_columns": [ "id" ]
+        },
+        {
+          "columns": [ "article_id" ],
+          "referenced_schema": null,
+          "referenced_table": "articles",
+          "referenced_columns": [ "id" ]
+        }
+      ],
+      "unique_constraints": []
+    },
+    {
+      "schema": null,
+      "name": "favorites",
+      "columns": [
+        {
+          "name": "user_id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": 1
+        },
+        {
+          "name": "article_id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": 2
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [ "article_id" ],
+          "referenced_schema": null,
+          "referenced_table": "articles",
+          "referenced_columns": [ "id" ]
+        },
+        {
+          "columns": [ "user_id" ],
+          "referenced_schema": null,
+          "referenced_table": "users",
+          "referenced_columns": [ "id" ]
+        }
+      ],
+      "unique_constraints": []
+    },
+    {
+      "schema": null,
+      "name": "follows",
+      "columns": [
+        {
+          "name": "follower_id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": 1
+        },
+        {
+          "name": "followed_id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": 2
+        }
+      ],
+      "foreign_keys": [
+        {
+          "columns": [ "followed_id" ],
+          "referenced_schema": null,
+          "referenced_table": "users",
+          "referenced_columns": [ "id" ]
+        },
+        {
+          "columns": [ "follower_id" ],
+          "referenced_schema": null,
+          "referenced_table": "users",
+          "referenced_columns": [ "id" ]
+        }
+      ],
+      "unique_constraints": []
+    },
+    {
+      "schema": null,
+      "name": "tags",
+      "columns": [
+        {
+          "name": "id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": 1
+        },
+        {
+          "name": "name",
+          "db_type": { "kind": "text" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        }
+      ],
+      "foreign_keys": [],
+      "unique_constraints": [
+        { "name": "sqlite_autoindex_tags_1", "columns": [ "name" ] }
+      ]
+    },
+    {
+      "schema": null,
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "db_type": { "kind": "int64" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": 1
+        },
+        {
+          "name": "email",
+          "db_type": { "kind": "text" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "username",
+          "db_type": { "kind": "text" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "password_hash",
+          "db_type": { "kind": "text" },
+          "nullable": false,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "bio",
+          "db_type": { "kind": "text" },
+          "nullable": true,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        },
+        {
+          "name": "image",
+          "db_type": { "kind": "text" },
+          "nullable": true,
+          "default": null,
+          "generated": false,
+          "primary_key_position": null
+        }
+      ],
+      "foreign_keys": [],
+      "unique_constraints": [
+        { "name": "sqlite_autoindex_users_1", "columns": [ "email" ] },
+        { "name": "sqlite_autoindex_users_2", "columns": [ "username" ] },
+        { "name": "users_email_lower_unique", "columns": [ "email" ] },
+        { "name": "users_username_lower_unique", "columns": [ "username" ] }
+      ]
+    }
+  ]
+}

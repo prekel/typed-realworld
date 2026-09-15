@@ -1,0 +1,36 @@
+(rule
+ (target schema.ml)
+ (deps ../../../db/schema.json)
+ (action
+  (with-stdout-to
+   %{target}
+   (run %{bin:typed-sql-codegen} %{dep:../../../db/schema.json}))))
+
+(library
+ (name realworld_sqlite)
+ (public_name typed-realworld.sqlite)
+ (modules
+  article_queries
+  article_repository_sqlite
+  comment_queries
+  comment_repository_sqlite
+  database_sqlite_lwt
+  repository_support
+  schema
+  user_queries
+  user_repository_sqlite)
+ (private_modules repository_support)
+ (libraries
+  base
+  caqti
+  caqti-lwt
+  caqti-lwt.unix
+  lwt
+  ptime
+  realworld_application
+  realworld_domain
+  typed-sql
+  typed-sql-caqti-lwt
+  uri)
+ (preprocess
+  (pps ppx_let)))

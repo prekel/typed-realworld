@@ -1,0 +1,16 @@
+(library
+ (name realworld_security)
+ (public_name typed-realworld.security)
+ (libraries
+  base
+  base64
+  digestif
+  kdf.scrypt
+  mirage-crypto-rng
+  ptime
+  ptime.clock.os
+  realworld_application
+  realworld_domain
+  yojson)
+ (preprocess
+  (pps ppx_let)))

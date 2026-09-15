@@ -1,0 +1,19 @@
+(library
+ (name realworld_application)
+ (public_name typed-realworld.application)
+ (modules
+  article_repository
+  article_service
+  clock
+  comment_repository
+  comment_service
+  database
+  password_hasher
+  persistence_error
+  token_service
+  user_repository
+  user_service
+  validation)
+ (libraries base lwt ptime realworld_domain)
+ (preprocess
+  (pps ppx_let)))

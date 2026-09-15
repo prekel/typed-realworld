@@ -1,0 +1,19 @@
+(executable
+ (name realworld_server)
+ (public_name typed-realworld-server)
+ (libraries
+  base
+  caqti-driver-sqlite3
+  lwt.unix
+  ptime.clock.os
+  mirage-crypto-rng.unix
+  opium
+  realworld_application
+  realworld_domain
+  realworld_http
+  realworld_sqlite
+  realworld_security
+  typed-endpoint-opium
+  uri)
+ (preprocess
+  (pps ppx_let)))
