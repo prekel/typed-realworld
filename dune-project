@@ -13,31 +13,6 @@
 
 (license MIT)
 
-(pin
- (url ../typed-endpoint)
- (package
-  (name typed-endpoint)))
-
-(pin
- (url ../typed-endpoint)
- (package
-  (name typed-endpoint-opium)))
-
-(pin
- (url ../typed-endpoint)
- (package
-  (name typed-endpoint-testing)))
-
-(pin
- (url ../typed-sql)
- (package
-  (name typed-sql)))
-
-(pin
- (url ../typed-sql)
- (package
-  (name typed-sql-caqti-lwt)))
-
 (package
  (name typed-realworld)
  (synopsis "RealWorld backend built with typed-endpoint and typed-sql")
@@ -59,14 +34,14 @@
   uri
   cohttp
   (opium (= 0.18.0))
-  typed-endpoint
-  typed-endpoint-opium
-  typed-sql
-  typed-sql-caqti-lwt
+  (typed-endpoint (= 0.1.0))
+  (typed-endpoint-opium (= 0.1.0))
+  (typed-sql (= 0.1.1))
+  (typed-sql-caqti-lwt (= 0.1.1))
   (ppx_let (>= v0.17.1))
   (ppx_deriving_yojson :build)
   (ppx_deriving_jsonschema (>= 0.0.8))
-  (typed-endpoint-testing :with-test)
+  (typed-endpoint-testing (and (= 0.1.0) :with-test))
   (jsonschema :with-test)
   (ppx_expect :with-test)
   (ocamlformat (and (= 0.29.0) :with-dev-setup))

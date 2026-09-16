@@ -37,6 +37,15 @@
 
 ## Инварианты RealWorld
 
+- Идентификаторы сущностей — разные абстрактные доменные типы (`User.Id`,
+  `Article.Id`, `Comment.Id`) поверх положительного `int64`. Преобразование в
+  SQL и transport primitives выполняется только на границах.
+- Path/query codecs сразу возвращают доменные значения (`User.Username`,
+  `Article.Slug`, `Page.Limit`, `Page.Offset`); controller handler не принимает
+  промежуточные transport primitives и не валидирует их вручную.
+- Для трёх состояний PATCH используй `Domain.Patch` (`Keep`, `Set`, `Clear`),
+  а не вложенные `option option`. Недопустимый `null` отклоняй в HTTP DTO до
+  вызова application service.
 - Runtime routes монтируются через typed-endpoint/Opium; wire-contract закреплён official Hurl suite.
 - JSON точно следует официальному RealWorld contract: envelope-поля,
   camelCase, `null` для отсутствующих profile fields и отсутствие `body` в
@@ -63,6 +72,9 @@
 - Публичные контракты и odoc-комментарии размещай в `.mli`.
 - SELECT записывай `Query.(from ... |> ... |> select ...)`; `select` ставь
   последним. DML оформляй аналогично через локальное открытие builder.
+- Для insert-or-return существующей строки используй target-specific
+  `Insert.on_conflict ... |> do_update ... |> returning`. Для идемпотентного
+  добавления связи без чтения строки оставляй `on_conflict_do_nothing`.
 - Основные команды: `make build`, `make test`, `make fmt`, `make check`.
 - Миграции запускаются только явно через `make migrate`. Сервер, сборка и
   получение connection не должны обновлять схему автоматически.

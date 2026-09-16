@@ -15,7 +15,9 @@ let filtered ~(filters : Domain.Article.filters) ~followed_by =
     |> where_opt filters.author ~f:(fun article username ->
       from Users.table
       |> where (fun user ->
-        Users.id user =. Articles.author_id article &&. (Users.username user =$ username))
+        Users.id user
+        =. Articles.author_id article
+        &&. (Users.username user =$ Domain.User.Username.to_string username))
       |> exists)
     |> where_opt filters.tag ~f:(fun article name ->
       from Article_tags.table
@@ -24,7 +26,7 @@ let filtered ~(filters : Domain.Article.filters) ~followed_by =
       |> where (fun (article_tag, tag) ->
         Article_tags.article_id article_tag
         =. Articles.id article
-        &&. (Tags.name tag =$ name))
+        &&. (Tags.name tag =$ Domain.Article.Tag.to_string name))
       |> exists)
     |> where_opt filters.favorited_by ~f:(fun article username ->
       from Favorites.table
@@ -33,13 +35,13 @@ let filtered ~(filters : Domain.Article.filters) ~followed_by =
       |> where (fun (favorite, user) ->
         Favorites.article_id favorite
         =. Articles.id article
-        &&. (Users.username user =$ username))
+        &&. (Users.username user =$ Domain.User.Username.to_string username))
       |> exists)
     |> where_opt followed_by ~f:(fun article user_id ->
       from Follows.table
       |> where (fun follow ->
         Follows.follower_id follow
-        =$ Int64.of_int user_id
+        =$ Domain.User.Id.to_int64 user_id
         &&. (Follows.followed_id follow =. Articles.author_id article))
       |> exists))
 ;;
@@ -48,8 +50,8 @@ let page ~filters ~followed_by ~(page : Domain.Page.t) =
   filtered ~filters ~followed_by
   |> Query.order_by (fun article -> Articles.created_at article) `Desc
   |> Query.order_by (fun article -> Articles.id article) `Desc
-  |> Query.limit page.limit
-  |> Query.offset page.offset
+  |> Query.limit (Domain.Page.limit page)
+  |> Query.offset (Domain.Page.offset page)
   |> Query.select Articles.projection
 ;;
 
@@ -97,20 +99,15 @@ let favorites_by_article_ids article_ids =
 let by_slug slug =
   Query.(
     from Articles.table
-    |> where (fun article -> Articles.slug article =$ slug)
+    |> where (fun article -> Articles.slug article =$ Domain.Article.Slug.to_string slug)
     |> select Articles.projection)
-;;
-
-let tag_by_name name =
-  Query.(
-    from Tags.table |> where (fun tag -> Tags.name tag =$ name) |> select Tags.projection)
 ;;
 
 let insert ~author_id ~slug ~now (article : Domain.Article.create) =
   Insert.(
     into Articles.table
-    |> set Articles.author_id_column (Int64.of_int author_id)
-    |> set Articles.slug_column slug
+    |> set Articles.author_id_column (Domain.User.Id.to_int64 author_id)
+    |> set Articles.slug_column (Domain.Article.Slug.to_string slug)
     |> set Articles.title_column article.title
     |> set Articles.description_column article.description
     |> set Articles.body_column article.body
@@ -122,7 +119,7 @@ let insert ~author_id ~slug ~now (article : Domain.Article.create) =
 let update ~id ~slug ~title ~description ~body ~now =
   Update.(
     table Articles.table
-    |> set Articles.slug_column slug
+    |> set Articles.slug_column (Domain.Article.Slug.to_string slug)
     |> set Articles.title_column title
     |> set Articles.description_column description
     |> set Articles.body_column body
@@ -136,8 +133,15 @@ let delete id =
     from Articles.table |> where (fun article -> Articles.id article =$ id) |> command)
 ;;
 
-let insert_tag name =
-  Insert.(into Tags.table |> set Tags.name_column name |> returning Tags.projection)
+let upsert_tag name =
+  let target = Insert.Conflict_target.column Tags.name_column in
+  Insert.(
+    into Tags.table
+    |> set Tags.name_column (Domain.Article.Tag.to_string name)
+    |> on_conflict target
+    |> do_update (fun ~existing:_ ~excluded ->
+      Conflict_update.(empty |> set_expr Tags.name_column (Tags.name excluded)))
+    |> returning Tags.projection)
 ;;
 
 let clear_tags article_id =
@@ -159,7 +163,7 @@ let attach_tag ~article_id ~tag_id ~position =
 let add_favorite ~user_id ~article_id =
   Insert.(
     into Favorites.table
-    |> set Favorites.user_id_column (Int64.of_int user_id)
+    |> set Favorites.user_id_column (Domain.User.Id.to_int64 user_id)
     |> set Favorites.article_id_column article_id
     |> on_conflict_do_nothing
     |> command)
@@ -170,7 +174,7 @@ let remove_favorite ~user_id ~article_id =
     from Favorites.table
     |> where (fun favorite ->
       Favorites.user_id favorite
-      =$ Int64.of_int user_id
+      =$ Domain.User.Id.to_int64 user_id
       &&. (Favorites.article_id favorite =$ article_id))
     |> command)
 ;;

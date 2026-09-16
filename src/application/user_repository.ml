@@ -3,10 +3,10 @@ module Domain = Realworld_domain.Domain
 
 type changes =
   { email : string option
-  ; username : string option
+  ; username : Domain.User.Username.t option
   ; password_hash : string option
-  ; bio : string option option
-  ; image : string option option
+  ; bio : string Domain.Patch.t
+  ; image : string Domain.Patch.t
   }
 
 module type S = sig
@@ -16,7 +16,7 @@ module type S = sig
   val create
     :  conn:connection
     -> email:string
-    -> username:string
+    -> username:Domain.User.Username.t
     -> password_hash:string
     -> ( Domain.User.t
          , [ `Email_taken | `Username_taken | `Persistence of Persistence_error.t ] )
@@ -49,13 +49,13 @@ module type S = sig
   val profile
     :  conn:connection
     -> viewer_id:Domain.User.id option
-    -> username:string
+    -> username:Domain.User.Username.t
     -> (Domain.Profile.t option, Persistence_error.t) Result.t io
 
   val follow
     :  conn:connection
     -> follower_id:Domain.User.id
-    -> username:string
+    -> username:Domain.User.Username.t
     -> ( Domain.Profile.t
          , [ `Cannot_follow_self | `Not_found | `Persistence of Persistence_error.t ] )
          Result.t
@@ -64,7 +64,7 @@ module type S = sig
   val unfollow
     :  conn:connection
     -> follower_id:Domain.User.id
-    -> username:string
+    -> username:Domain.User.Username.t
     -> (Domain.Profile.t, [ `Not_found | `Persistence of Persistence_error.t ]) Result.t
          io
 end

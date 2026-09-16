@@ -26,4 +26,10 @@ if ! curl --silent --fail "$base/api/tags" >/dev/null; then
   exit 1
 fi
 uid=$(date +%s)$$
-"$root/scripts/hurl.sh" --test --jobs 1 --variable "host=$base" --variable "uid=$uid" "$root"/test/hurl/official/*.hurl
+"$root/scripts/hurl.sh" \
+  --test \
+  --jobs 1 \
+  --variable "host=$base" \
+  --variable "uid=$uid" \
+  "$root"/test/hurl/official/*.hurl \
+  "$root"/test/hurl/project/*.hurl

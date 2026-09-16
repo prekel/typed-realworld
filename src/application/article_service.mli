@@ -21,7 +21,7 @@ module type S = sig
   val find
     :  database:database
     -> viewer_id:Domain.User.id option
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (Domain.Article.t option, Persistence_error.t) Result.t Lwt.t
 
   val create
@@ -36,7 +36,7 @@ module type S = sig
   val update
     :  database:database
     -> author_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> Domain.Article.update
     -> ( Domain.Article.t
          , [ `Forbidden
@@ -50,21 +50,21 @@ module type S = sig
   val delete
     :  database:database
     -> author_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (unit, [ `Forbidden | `Not_found | `Persistence of Persistence_error.t ]) Result.t
          Lwt.t
 
   val favorite
     :  database:database
     -> user_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (Domain.Article.t, [ `Not_found | `Persistence of Persistence_error.t ]) Result.t
          Lwt.t
 
   val unfavorite
     :  database:database
     -> user_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (Domain.Article.t, [ `Not_found | `Persistence of Persistence_error.t ]) Result.t
          Lwt.t
 

@@ -6,6 +6,7 @@
   comment_controller
   controller_context
   dto
+  endpoint_parameter
   user_controller)
  (libraries
   base

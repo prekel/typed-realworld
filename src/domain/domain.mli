@@ -1,12 +1,45 @@
 open! Base
 
+module type ID = sig
+  type t
+
+  val of_int64 : int64 -> t option
+  val of_string : string -> t option
+  val of_int64_exn : int64 -> t
+  val to_int64 : t -> int64
+  val to_string : t -> string
+  val equal : t -> t -> bool
+end
+
+module type STRING_VALUE = sig
+  type t
+
+  val of_string : string -> t option
+  val of_string_exn : string -> t
+  val to_string : t -> string
+  val equal : t -> t -> bool
+end
+
+module Patch : sig
+  type 'a t =
+    | Keep
+    | Set of 'a
+    | Clear
+
+  val map : 'a t -> f:('a -> 'b) -> 'b t
+  val apply : 'a t -> current:'a option -> 'a option
+end
+
 module User : sig
-  type id = int
+  module Id : ID
+  module Username : STRING_VALUE
+
+  type id = Id.t
 
   type t =
     { id : id
     ; email : string
-    ; username : string
+    ; username : Username.t
     ; password_hash : string
     ; bio : string option
     ; image : string option
@@ -22,8 +55,8 @@ module User : sig
     { email : string option
     ; username : string option
     ; password : string option
-    ; bio : string option option
-    ; image : string option option
+    ; bio : string Patch.t
+    ; image : string Patch.t
     }
 
   val empty_update : update
@@ -31,7 +64,7 @@ end
 
 module Profile : sig
   type t =
-    { username : string
+    { username : User.Username.t
     ; bio : string option
     ; image : string option
     ; following : bool
@@ -39,15 +72,19 @@ module Profile : sig
 end
 
 module Article : sig
-  type id = int
+  module Id : ID
+  module Slug : STRING_VALUE
+  module Tag : STRING_VALUE
+
+  type id = Id.t
 
   type t =
     { id : id
-    ; slug : string
+    ; slug : Slug.t
     ; title : string
     ; description : string
     ; body : string
-    ; tag_list : string list
+    ; tag_list : Tag.t list
     ; created_at : Ptime.t
     ; updated_at : Ptime.t
     ; favorited : bool
@@ -59,29 +96,31 @@ module Article : sig
     { title : string
     ; description : string
     ; body : string
-    ; tag_list : string list
+    ; tag_list : Tag.t list
     }
 
   type update =
     { title : string option
     ; description : string option
     ; body : string option
-    ; tag_list : string list option option
+    ; tag_list : Tag.t list option
     }
 
   type filters =
-    { tag : string option
-    ; author : string option
-    ; favorited_by : string option
+    { tag : Tag.t option
+    ; author : User.Username.t option
+    ; favorited_by : User.Username.t option
     }
 
   val empty_update : update
   val no_filters : filters
-  val slugify : string -> string
+  val slugify : string -> Slug.t option
 end
 
 module Comment : sig
-  type id = int
+  module Id : ID
+
+  type id = Id.t
 
   type t =
     { id : id
@@ -93,11 +132,21 @@ module Comment : sig
 end
 
 module Page : sig
-  type t =
-    { limit : int
-    ; offset : int
-    }
+  module type VALUE = sig
+    type t
 
-  val create : ?limit:int -> ?offset:int -> unit -> (t, string) Result.t
+    val of_int : int -> t option
+    val of_string : string -> t option
+    val to_int : t -> int
+  end
+
+  module Limit : VALUE
+  module Offset : VALUE
+
+  type t
+
+  val create : ?limit:Limit.t -> ?offset:Offset.t -> unit -> t
+  val limit : t -> int
+  val offset : t -> int
   val default : t
 end

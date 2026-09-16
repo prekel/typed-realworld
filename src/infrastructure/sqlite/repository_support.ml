@@ -45,14 +45,11 @@ let execute_unit ~conn command =
   Result.map result ~f:(fun _ -> ())
 ;;
 
-let int_of_id id = Int64.to_int_exn id
-let id_of_int id = Int64.of_int id
-
 let user_of_row (row : Users.t) =
   Domain.User.
-    { id = int_of_id row.id
+    { id = Id.of_int64_exn row.id
     ; email = row.email
-    ; username = row.username
+    ; username = Username.of_string_exn row.username
     ; password_hash = row.password_hash
     ; bio = row.bio
     ; image = row.image
@@ -63,11 +60,15 @@ let profile_of_user ~viewer_id ~follows user =
   let following =
     Option.value_map viewer_id ~default:false ~f:(fun viewer_id ->
       List.exists follows ~f:(fun follow ->
-        Int64.equal follow.Follows.follower_id (id_of_int viewer_id)
+        Int64.equal follow.Follows.follower_id (Domain.User.Id.to_int64 viewer_id)
         && Int64.equal follow.Follows.followed_id user.Users.id))
   in
   Domain.Profile.
-    { username = user.username; bio = user.bio; image = user.image; following }
+    { username = Domain.User.Username.of_string_exn user.username
+    ; bio = user.bio
+    ; image = user.image
+    ; following
+    }
 ;;
 
 let users ~conn = fetch ~conn (User_queries.all_rows ())
@@ -77,7 +78,8 @@ let comments ~conn = fetch ~conn (Comment_queries.all ())
 let find_user_row rows id = List.find rows ~f:(fun row -> Int64.equal row.Users.id id)
 
 let find_article_row rows slug =
-  List.find rows ~f:(fun row -> String.equal row.Articles.slug slug)
+  List.find rows ~f:(fun row ->
+    String.equal row.Articles.slug (Domain.Article.Slug.to_string slug))
 ;;
 
 let tag_names ~article_id ~tags:all_tags ~article_tags:all_article_tags =
@@ -88,7 +90,7 @@ let tag_names ~article_id ~tags:all_tags ~article_tags:all_article_tags =
   |> List.filter_map ~f:(fun article_tag ->
     List.find all_tags ~f:(fun tag ->
       Int64.equal tag.Tags.id article_tag.Article_tags.tag_id)
-    |> Option.map ~f:(fun tag -> tag.Tags.name))
+    |> Option.map ~f:(fun tag -> Domain.Article.Tag.of_string_exn tag.Tags.name))
 ;;
 
 let article_of_row
@@ -106,7 +108,7 @@ let article_of_row
     let favorited =
       Option.value_map viewer_id ~default:false ~f:(fun viewer_id ->
         List.exists all_favorites ~f:(fun favorite ->
-          Int64.equal favorite.Favorites.user_id (id_of_int viewer_id)
+          Int64.equal favorite.Favorites.user_id (Domain.User.Id.to_int64 viewer_id)
           && Int64.equal favorite.Favorites.article_id row.id))
     in
     let favorites_count =
@@ -115,8 +117,8 @@ let article_of_row
     in
     Ok
       Domain.Article.
-        { id = int_of_id row.id
-        ; slug = row.slug
+        { id = Id.of_int64_exn row.id
+        ; slug = Slug.of_string_exn row.slug
         ; title = row.title
         ; description = row.description
         ; body = row.body

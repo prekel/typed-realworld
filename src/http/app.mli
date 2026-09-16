@@ -14,7 +14,7 @@ module Make
 
   val compile
     :  database:Users.database
-    -> issue:(user_id:int -> string)
-    -> verify:(string -> int option)
+    -> issue:(user_id:Realworld_domain.Domain.User.id -> string)
+    -> verify:(string -> Realworld_domain.Domain.User.id option)
     -> Endpoint.Compiled.t
 end

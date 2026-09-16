@@ -48,13 +48,13 @@ module type S = sig
   val profile
     :  database:database
     -> viewer_id:Domain.User.id option
-    -> username:string
+    -> username:Domain.User.Username.t
     -> (Domain.Profile.t option, Persistence_error.t) Result.t Lwt.t
 
   val follow
     :  database:database
     -> follower_id:Domain.User.id
-    -> username:string
+    -> username:Domain.User.Username.t
     -> ( Domain.Profile.t
          , [ `Cannot_follow_self | `Not_found | `Persistence of Persistence_error.t ] )
          Result.t
@@ -63,7 +63,7 @@ module type S = sig
   val unfollow
     :  database:database
     -> follower_id:Domain.User.id
-    -> username:string
+    -> username:Domain.User.Username.t
     -> (Domain.Profile.t, [ `Not_found | `Persistence of Persistence_error.t ]) Result.t
          Lwt.t
 end
@@ -87,6 +87,7 @@ struct
     | Error errors, _, _ | _, Error errors, _ | _, _, Error errors ->
       Lwt.return (Error (`Validation errors))
     | Ok email, Ok username, Ok password ->
+      let username = Domain.User.Username.of_string_exn username in
       (match Hasher.hash password with
        | Error message ->
          Lwt.return (Error (`Persistence (Persistence_error.of_string message)))
@@ -141,7 +142,8 @@ struct
     in
     let username =
       Option.value_map changes.username ~default:(Ok None) ~f:(fun value ->
-        Result.map (Validation.normalized_identity "username" value) ~f:Option.some)
+        Result.map (Validation.normalized_identity "username" value) ~f:(fun value ->
+          Some (Domain.User.Username.of_string_exn value)))
     in
     let password =
       Option.value_map changes.password ~default:(Ok None) ~f:(fun value ->
@@ -184,22 +186,20 @@ struct
 
   let profile ~database ~viewer_id ~username =
     Database.with_connection database ~on_error:Fn.id ~f:(fun ~conn ->
-      Users.profile ~conn ~viewer_id ~username:(String.lowercase username))
+      Users.profile ~conn ~viewer_id ~username)
   ;;
 
   let follow ~database ~follower_id ~username =
     Database.transaction
       database
       ~on_error:(fun error -> `Persistence error)
-      ~f:(fun ~conn ->
-        Users.follow ~conn ~follower_id ~username:(String.lowercase username))
+      ~f:(fun ~conn -> Users.follow ~conn ~follower_id ~username)
   ;;
 
   let unfollow ~database ~follower_id ~username =
     Database.transaction
       database
       ~on_error:(fun error -> `Persistence error)
-      ~f:(fun ~conn ->
-        Users.unfollow ~conn ~follower_id ~username:(String.lowercase username))
+      ~f:(fun ~conn -> Users.unfollow ~conn ~follower_id ~username)
   ;;
 end

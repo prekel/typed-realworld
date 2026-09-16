@@ -1,5 +1,6 @@
 open! Base
 open Typed_endpoint
+module Domain = Realworld_domain.Domain
 
 module Make
     (Backend : Backend.S with type 'a io = 'a Lwt.t)
@@ -10,101 +11,109 @@ struct
   open Endpoint
   open Io.Let_syntax
 
-  let comment_json = Response.json (module Dto.Comment_response)
-  let comments_json = Response.json (module Dto.Comments_response)
-  let error_json = Response.json (module Dto.Error_response)
   let error fields = Dto.Error_response.make fields
-  let slug = arg "slug" (Parameter.string ~description:"Article slug" ())
-  let comment_id = arg "id" (Parameter.int ~description:"Comment identifier" ())
+
+  let slug =
+    arg
+      "slug"
+      (Endpoint_parameter.string_value
+         (module Domain.Article.Slug)
+         ~schema_name:"ArticleSlug"
+         ~description:"Article slug"
+         ())
+  ;;
+
+  let comment_id =
+    arg
+      "id"
+      (Endpoint_parameter.entity_id
+         (module Domain.Comment.Id)
+         ~schema_name:"CommentId"
+         ~description:"Comment identifier"
+         ())
+  ;;
+
   let unavailable = error [ "server", [ "is temporarily unavailable" ] ]
   let not_found resource = error [ resource, [ "not found" ] ]
 
-  let list ~context =
-    let ok = case `OK comments_json in
-    let missing = case `Not_found error_json in
-    let unavailable_case = case `Internal_server_error error_json in
+  let list =
     get / "articles" /: slug / "comments"
     |> documented ~operation_id:"getComments" ~summary:"Get article comments"
     |> accepts Request.empty
-    |> returns (ok <|> missing <|> unavailable_case)
-    |> handle_with ~context
-       @@ fun slug (optional_auth : _ Controller_context.optional_auth) () ->
-       let%bind result =
-         Comments.list
-           ~database:optional_auth.Controller_context.dependencies.database
-           ~viewer_id:optional_auth.Controller_context.viewer_id
-           ~slug
-       in
-       match result with
-       | Ok comments -> respond ok (Dto.Comments_response.make comments)
-       | Error `Article_not_found -> respond missing (not_found "article")
-       | Error (`Persistence _) -> respond unavailable_case unavailable
+    |> returns
+         (case `OK (Response.json (module Dto.Comments_response))
+          <|> case `Not_found (Response.json (module Dto.Error_response))
+          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+    ==> fun slug ok missing unavailable_case context () ->
+    let database = Contexts.Optional_auth.database context in
+    let viewer_id = Contexts.Optional_auth.viewer_id context in
+    let%bind result = Comments.list ~database ~viewer_id ~slug in
+    match result with
+    | Ok comments -> respond ok (Dto.Comments_response.make comments)
+    | Error `Article_not_found -> respond missing (not_found "article")
+    | Error (`Persistence _) -> respond unavailable_case unavailable
   ;;
 
-  let create ~context =
-    let created = case `Created comment_json in
-    let invalid = case `Unprocessable_entity error_json in
-    let missing = case `Not_found error_json in
-    let unavailable_case = case `Internal_server_error error_json in
+  let create =
     post / "articles" /: slug / "comments"
     |> documented ~operation_id:"createComment" ~summary:"Create a comment"
     |> accepts (Request.json (module Dto.Comment_create_request))
-    |> returns (created <|> invalid <|> missing <|> unavailable_case)
-    |> handle_with ~context
-       @@ fun slug (authenticated : _ Controller_context.authenticated) body ->
-       let%bind result =
-         Comments.create
-           ~database:authenticated.Controller_context.dependencies.database
-           ~author_id:authenticated.Controller_context.user_id
-           ~slug
-           ~body
-       in
-       match result with
-       | Ok comment -> respond created (Dto.Comment_response.make comment)
-       | Error (`Validation fields) -> respond invalid (error fields)
-       | Error `Article_not_found -> respond missing (not_found "article")
-       | Error (`Persistence _) -> respond unavailable_case unavailable
+    |> returns
+         (case `Created (Response.json (module Dto.Comment_response))
+          <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
+          <|> case `Not_found (Response.json (module Dto.Error_response))
+          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+    ==> fun slug created invalid missing unavailable_case context body ->
+    let database = Contexts.Authenticated.database context in
+    let user_id = Contexts.Authenticated.user_id context in
+    let%bind result = Comments.create ~database ~author_id:user_id ~slug ~body in
+    match result with
+    | Ok comment -> respond created (Dto.Comment_response.make comment)
+    | Error (`Validation fields) -> respond invalid (error fields)
+    | Error `Article_not_found -> respond missing (not_found "article")
+    | Error (`Persistence _) -> respond unavailable_case unavailable
   ;;
 
-  let delete_comment ~context =
-    let no_content =
-      case `No_content (Response.empty ~description:"Comment deleted" ())
-    in
-    let missing = case `Not_found error_json in
-    let forbidden_case = case `Forbidden error_json in
-    let unavailable_case = case `Internal_server_error error_json in
+  let delete_comment =
     delete / "articles" /: slug / "comments" /: comment_id
     |> documented ~operation_id:"deleteComment" ~summary:"Delete a comment"
     |> accepts Request.empty
-    |> returns (no_content <|> missing <|> forbidden_case <|> unavailable_case)
-    |> handle_with ~context
-       @@ fun slug comment_id (authenticated : _ Controller_context.authenticated) () ->
-       let%bind result =
-         Comments.delete
-           ~database:authenticated.Controller_context.dependencies.database
-           ~author_id:authenticated.Controller_context.user_id
-           ~slug
-           ~comment_id
-       in
-       match result with
-       | Ok () -> respond no_content ()
-       | Error `Article_not_found -> respond missing (not_found "article")
-       | Error `Comment_not_found -> respond missing (not_found "comment")
-       | Error `Forbidden -> respond forbidden_case (error [ "comment", [ "forbidden" ] ])
-       | Error (`Persistence _) -> respond unavailable_case unavailable
+    |> returns
+         (case `No_content (Response.empty ~description:"Comment deleted" ())
+          <|> case `Not_found (Response.json (module Dto.Error_response))
+          <|> case `Forbidden (Response.json (module Dto.Error_response))
+          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+    ==>
+    fun slug comment_id no_content missing forbidden_case unavailable_case context () ->
+    let database = Contexts.Authenticated.database context in
+    let user_id = Contexts.Authenticated.user_id context in
+    let%bind result = Comments.delete ~database ~author_id:user_id ~slug ~comment_id in
+    match result with
+    | Ok () -> respond no_content ()
+    | Error `Article_not_found -> respond missing (not_found "article")
+    | Error `Comment_not_found -> respond missing (not_found "comment")
+    | Error `Forbidden -> respond forbidden_case (error [ "comment", [ "forbidden" ] ])
+    | Error (`Persistence _) -> respond unavailable_case unavailable
   ;;
 
-  let group dependencies =
-    let authenticated = Contexts.authenticated dependencies in
-    let optional_auth = Contexts.optional_auth dependencies in
-    Group.make
-      ~prefix:[ "api" ]
-      ~decode_error:Contexts.decode_error
-      ~tags:[ "Comments" ]
-      ~description:"Article comments"
-      [ list ~context:optional_auth
-      ; create ~context:authenticated
-      ; delete_comment ~context:authenticated
-      ]
+  let groups dependencies =
+    let group ~context ~description routes =
+      Group.make_with_context
+        ~context
+        ~prefix:[ "api" ]
+        ~decode_error:Contexts.decode_error
+        ~tags:[ "Comments" ]
+        ~description
+        routes
+    in
+    [ group
+        ~context:(Contexts.optional_auth dependencies)
+        ~description:"Public comment queries"
+        [ list ]
+    ; group
+        ~context:(Contexts.authenticated dependencies)
+        ~description:"Authenticated comment operations"
+        [ create; delete_comment ]
+    ]
   ;;
 end

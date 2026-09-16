@@ -9,8 +9,13 @@ let () =
   assert (Password.verify ~encoded "password123");
   assert (not (Password.verify ~encoded "wrong-password"));
   let module Token = (val Jwt.create ~secret:"test-secret") in
-  let token = Token.issue ~user_id:42 in
-  assert (Option.value_map (Token.verify token) ~default:false ~f:(Int.equal 42));
+  let user_id = Domain.User.Id.of_int64_exn 42L in
+  let token = Token.issue ~user_id in
+  assert (
+    Option.value_map (Token.verify token) ~default:false ~f:(Domain.User.Id.equal user_id));
   assert (Option.is_none (Token.verify (token ^ "x")));
-  assert (String.equal (Domain.Article.slugify "Hello, OCaml world!") "hello-ocaml-world")
+  assert (
+    Domain.Article.slugify "Hello, OCaml world!"
+    |> Option.exists ~f:(fun slug ->
+      String.equal (Domain.Article.Slug.to_string slug) "hello-ocaml-world"))
 ;;

@@ -43,12 +43,15 @@ let check_user conn =
     Adapter.fetch_opt ~conn (Realworld_sqlite.User_queries.by_email email)
   in
   let user = or_fail result |> Option.value_exn in
-  assert (Int.equal user.id 1);
-  assert (String.equal user.username "before-upgrade");
+  assert (Domain.User.Id.equal user.id (Domain.User.Id.of_int64_exn 1L));
+  assert (String.equal (Domain.User.Username.to_string user.username) "before-upgrade");
   assert (String.equal user.password_hash "test-hash");
   assert (Option.is_none user.bio);
   assert (Option.is_none user.image);
-  let%map missing = Adapter.fetch_opt ~conn (Realworld_sqlite.User_queries.by_id 999) in
+  let missing_id = Domain.User.Id.of_int64_exn 999L in
+  let%map missing =
+    Adapter.fetch_opt ~conn (Realworld_sqlite.User_queries.by_id missing_id)
+  in
   assert (Option.is_none (or_fail missing))
 ;;
 
@@ -154,22 +157,27 @@ let verify conn =
   let%bind self_follow = Adapter.execute ~conn (follow 2L) in
   expect_constraint `Check self_follow;
   let%bind () = execute ~conn (follow 1L) in
-  let%bind () =
-    execute
-      ~conn
-      Insert.(
-        into Tags.table
-        |> set Tags.id_column 1L
-        |> set Tags.name_column "ocaml"
-        |> command)
+  let tag = Domain.Article.Tag.of_string_exn "ocaml" in
+  let%bind inserted_tag =
+    Adapter.fetch_one ~conn (Realworld_sqlite.Article_queries.upsert_tag tag)
   in
+  let inserted_tag = or_fail inserted_tag in
+  let%bind existing_tag =
+    Adapter.fetch_one ~conn (Realworld_sqlite.Article_queries.upsert_tag tag)
+  in
+  let existing_tag = or_fail existing_tag in
+  assert (Int64.equal inserted_tag.id existing_tag.id);
+  let%bind stored_tags =
+    Adapter.fetch ~conn Query.(from Tags.table |> select Tags.projection)
+  in
+  assert (Int.equal (List.length (or_fail stored_tags)) 1);
   let%bind () =
     execute
       ~conn
       Insert.(
         into Article_tags.table
         |> set Article_tags.article_id_column 1L
-        |> set Article_tags.tag_id_column 1L
+        |> set Article_tags.tag_id_column inserted_tag.id
         |> set Article_tags.position_column 0L
         |> command)
   in
@@ -223,9 +231,17 @@ let verify conn =
   assert (String.equal title "Generated schema");
   assert (String.equal username "before-upgrade");
   let filters : Domain.Article.filters =
-    { tag = Some "ocaml"; author = Some "before-upgrade"; favorited_by = Some "reader" }
+    { tag = Some (Domain.Article.Tag.of_string_exn "ocaml")
+    ; author = Some (Domain.User.Username.of_string_exn "before-upgrade")
+    ; favorited_by = Some (Domain.User.Username.of_string_exn "reader")
+    }
   in
-  let page = Domain.Page.{ limit = 1; offset = 0 } in
+  let page =
+    Domain.Page.create
+      ~limit:(Domain.Page.Limit.of_int 1 |> Option.value_exn)
+      ~offset:(Domain.Page.Offset.of_int 0 |> Option.value_exn)
+      ()
+  in
   let%bind filtered =
     Adapter.fetch
       ~conn
@@ -243,7 +259,7 @@ let verify conn =
       ~conn
       (Realworld_sqlite.Article_queries.page
          ~filters:Domain.Article.no_filters
-         ~followed_by:(Some 2)
+         ~followed_by:(Some (Domain.User.Id.of_int64_exn 2L))
          ~page)
   in
   assert (Int.equal (List.length (or_fail feed)) 1);

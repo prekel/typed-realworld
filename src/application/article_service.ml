@@ -20,7 +20,7 @@ module type S = sig
   val find
     :  database:database
     -> viewer_id:Domain.User.id option
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (Domain.Article.t option, Persistence_error.t) Result.t Lwt.t
 
   val create
@@ -35,7 +35,7 @@ module type S = sig
   val update
     :  database:database
     -> author_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> Domain.Article.update
     -> ( Domain.Article.t
          , [ `Forbidden
@@ -49,21 +49,21 @@ module type S = sig
   val delete
     :  database:database
     -> author_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (unit, [ `Forbidden | `Not_found | `Persistence of Persistence_error.t ]) Result.t
          Lwt.t
 
   val favorite
     :  database:database
     -> user_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (Domain.Article.t, [ `Not_found | `Persistence of Persistence_error.t ]) Result.t
          Lwt.t
 
   val unfavorite
     :  database:database
     -> user_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (Domain.Article.t, [ `Not_found | `Persistence of Persistence_error.t ]) Result.t
          Lwt.t
 
@@ -97,15 +97,16 @@ struct
 
   let slug_base title =
     match Domain.Article.slugify title with
-    | "" -> "article"
-    | value -> value
+    | None -> Domain.Article.Slug.of_string_exn "article"
+    | Some value -> value
   ;;
 
   let candidate base attempt =
     if Int.equal attempt 1 then
       base
     else
-      base ^ "-" ^ Int.to_string attempt
+      Domain.Article.Slug.of_string_exn
+        (Domain.Article.Slug.to_string base ^ "-" ^ Int.to_string attempt)
   ;;
 
   let create ~database ~author_id article =

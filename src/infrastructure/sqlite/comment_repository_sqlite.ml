@@ -13,7 +13,7 @@ let comment_of_row ~viewer_id ~all_users ~all_follows row =
   | Some author ->
     Ok
       Domain.Comment.
-        { id = int_of_id row.id
+        { id = Id.of_int64_exn row.id
         ; created_at = row.created_at
         ; updated_at = row.updated_at
         ; body = row.body
@@ -92,10 +92,11 @@ let delete ~conn ~author_id ~slug ~comment_id =
      | Error error -> Lwt.return (Error (`Persistence error))
      | Ok None -> Lwt.return (Error `Comment_not_found)
      | Ok (Some comment)
-       when not (Int64.equal comment.Comments.author_id (id_of_int author_id)) ->
-       Lwt.return (Error `Forbidden)
+       when not
+              (Int64.equal comment.Comments.author_id (Domain.User.Id.to_int64 author_id))
+       -> Lwt.return (Error `Forbidden)
      | Ok (Some comment) ->
-       let command = Comment_queries.delete comment.id in
+       let command = Comment_queries.delete comment_id in
        let%map deleted = execute_unit ~conn command in
        (match deleted with
         | Ok () -> Ok ()

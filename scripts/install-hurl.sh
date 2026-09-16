@@ -2,6 +2,13 @@
 set -euo pipefail
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+binary="$root/.tools/bin/hurl"
+if [[ -x $binary ]] \
+   && LD_LIBRARY_PATH="$root/.tools${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+      "$binary" --version >/dev/null 2>&1; then
+  exit 0
+fi
+
 version=$(<"$root/scripts/hurl-version")
 case "$(uname -s):$(uname -m)" in
   Linux:x86_64) target=x86_64-unknown-linux-gnu; checksum=cac7c4670d69444db120edb21fe06c97ba8c80dcc52279957c8dd18f05fb0c06 ;;

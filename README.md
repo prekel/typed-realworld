@@ -10,8 +10,10 @@ wire-contract проверяется закреплённым официальн
 
 ## Быстрый старт
 
-Нужны opam, SQLite development headers и соседние checkout `../typed-endpoint`
-и `../typed-sql`.
+Нужны opam, SQLite development headers и чистые worktree
+`../typed-endpoint-v0.1.0` и `../typed-sql-v0.1.1`. Их можно создать
+командами `git -C ../typed-endpoint worktree add --detach ../typed-endpoint-v0.1.0 v0.1.0`
+и `git -C ../typed-sql worktree add --detach ../typed-sql-v0.1.1 v0.1.1`.
 
 ```sh
 make create_switch
@@ -54,13 +56,14 @@ Email и username принимаются в ASCII, нормализуются к
 
 ```sh
 make test       # unit и миграционные SQLite integration tests
-make api-test   # временная БД, сервер и 154 запросов official RealWorld Hurl suite
+make api-test   # временная БД, сервер, official RealWorld и project Hurl scenarios
 make check      # fmt, build, tests, Hurl, docs, package и schema check
 ```
 
 Официальные Hurl-сценарии сохранены в `test/hurl/official/`; их upstream
-revision указан в `UPSTREAM`. `make hurl-tools` загружает Hurl 8.0.1 в
-`.tools/bin` с SHA-256 проверкой.
+revision указан в `UPSTREAM`. Дополнительные regression-сценарии проекта лежат
+в `test/hurl/project/`. `make hurl-tools` загружает Hurl 8.0.1 в `.tools/bin`
+с SHA-256 проверкой.
 
 ## Структура
 

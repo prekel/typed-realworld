@@ -50,13 +50,13 @@ module type S = sig
   val profile
     :  database:database
     -> viewer_id:Domain.User.id option
-    -> username:string
+    -> username:Domain.User.Username.t
     -> (Domain.Profile.t option, Persistence_error.t) Result.t Lwt.t
 
   val follow
     :  database:database
     -> follower_id:Domain.User.id
-    -> username:string
+    -> username:Domain.User.Username.t
     -> ( Domain.Profile.t
          , [ `Cannot_follow_self | `Not_found | `Persistence of Persistence_error.t ] )
          Result.t
@@ -65,7 +65,7 @@ module type S = sig
   val unfollow
     :  database:database
     -> follower_id:Domain.User.id
-    -> username:string
+    -> username:Domain.User.Username.t
     -> (Domain.Profile.t, [ `Not_found | `Persistence of Persistence_error.t ]) Result.t
          Lwt.t
 end

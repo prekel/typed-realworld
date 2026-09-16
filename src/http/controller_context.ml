@@ -1,25 +1,42 @@
 open! Base
 open Typed_endpoint
+module Domain = Realworld_domain.Domain
 
 type 'database dependencies =
   { database : 'database
-  ; issue : user_id:int -> string
-  ; verify : string -> int option
+  ; issue : user_id:Domain.User.id -> string
+  ; verify : string -> Domain.User.id option
   }
 
 type 'database authenticated =
   { dependencies : 'database dependencies
-  ; user_id : int
+  ; user_id : Domain.User.id
   }
 
 type 'database optional_auth =
   { dependencies : 'database dependencies
-  ; viewer_id : int option
+  ; viewer_id : Domain.User.id option
   }
 
 module Make (Backend : Backend.S) = struct
   module Endpoint = Make (Backend)
   open Endpoint
+
+  module Public = struct
+    let database (context : _ dependencies) = context.database
+    let issue (context : _ dependencies) = context.issue
+  end
+
+  module Authenticated = struct
+    let database (context : _ authenticated) = context.dependencies.database
+    let issue (context : _ authenticated) = context.dependencies.issue
+    let user_id (context : _ authenticated) = context.user_id
+  end
+
+  module Optional_auth = struct
+    let database (context : _ optional_auth) = context.dependencies.database
+    let viewer_id (context : _ optional_auth) = context.viewer_id
+  end
 
   let bearer =
     Security.Scheme.http_bearer
@@ -90,6 +107,16 @@ module Make (Backend : Backend.S) = struct
   let decode_error =
     Decode_error_response.json
       ~payload:(module Dto.Error_response)
-      ~map:(fun _ -> Dto.Error_response.make [ "body", [ "is invalid" ] ])
+      ~map:(fun decode_error ->
+        let field, message =
+          match decode_error with
+          | Decode_error.Invalid_parameter { name; _ } -> name, "is invalid"
+          | Missing_parameter { name; _ } -> name, "is required"
+          | Duplicate_parameter { name; _ } -> name, "must occur once"
+          | Invalid_json _ | Invalid_body _ -> "body", "is invalid"
+          | Unsupported_media_type _ -> "contentType", "is unsupported"
+          | Body_too_large _ -> "body", "is too large"
+        in
+        Dto.Error_response.make [ field, [ message ] ])
   ;;
 end

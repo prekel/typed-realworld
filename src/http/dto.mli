@@ -15,12 +15,12 @@ val optional_string : Yojson.Safe.t -> string -> (string option, string) Result.
 val optional_nullable_string
   :  Yojson.Safe.t
   -> string
-  -> (string option option, string) Result.t
+  -> (string Realworld_domain.Domain.Patch.t, string) Result.t
 
 val optional_string_list
   :  Yojson.Safe.t
   -> string
-  -> (string list option option, string) Result.t
+  -> (string list Realworld_domain.Domain.Patch.t, string) Result.t
 
 module Error_response : sig
   type t

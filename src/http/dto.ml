@@ -19,7 +19,7 @@ let errors values =
 
 let profile (profile : Domain.Profile.t) =
   `Assoc
-    [ "username", `String profile.username
+    [ "username", `String (Domain.User.Username.to_string profile.username)
     ; "bio", null_or_string profile.bio
     ; "image", null_or_string profile.image
     ; "following", `Bool profile.following
@@ -32,7 +32,7 @@ let user ~token (user : Domain.User.t) =
       , `Assoc
           [ "email", `String user.email
           ; "token", `String token
-          ; "username", `String user.username
+          ; "username", `String (Domain.User.Username.to_string user.username)
           ; "bio", null_or_string user.bio
           ; "image", null_or_string user.image
           ] )
@@ -41,10 +41,13 @@ let user ~token (user : Domain.User.t) =
 
 let article_json ~include_body (article : Domain.Article.t) =
   let fields =
-    [ "slug", `String article.slug
+    [ "slug", `String (Domain.Article.Slug.to_string article.slug)
     ; "title", `String article.title
     ; "description", `String article.description
-    ; "tagList", `List (List.map article.tag_list ~f:(fun tag -> `String tag))
+    ; ( "tagList"
+      , `List
+          (List.map article.tag_list ~f:(fun tag ->
+             `String (Domain.Article.Tag.to_string tag))) )
     ; "createdAt", timestamp article.created_at
     ; "updatedAt", timestamp article.updated_at
     ; "favorited", `Bool article.favorited
@@ -76,7 +79,7 @@ let comment_json (comment : Domain.Comment.t) =
   `Assoc
     [ ( "comment"
       , `Assoc
-          [ "id", `Int comment.id
+          [ "id", `Intlit (Domain.Comment.Id.to_string comment.id)
           ; "createdAt", timestamp comment.created_at
           ; "updatedAt", timestamp comment.updated_at
           ; "body", `String comment.body
@@ -122,24 +125,32 @@ let optional_string json name =
 
 let optional_nullable_string json name =
   match object_field json name with
-  | None -> Ok None
-  | Some `Null -> Ok (Some None)
-  | Some (`String value) -> Ok (Some (Some value))
+  | None -> Ok Domain.Patch.Keep
+  | Some `Null -> Ok Clear
+  | Some (`String value) -> Ok (Set value)
   | Some _ -> Error (name ^ " must be a string or null")
 ;;
 
 let optional_string_list json name =
   match object_field json name with
-  | None -> Ok None
-  | Some `Null -> Ok (Some None)
+  | None -> Ok Domain.Patch.Keep
+  | Some `Null -> Ok Clear
   | Some (`List values) ->
     values
     |> List.map ~f:(function
       | `String value -> Ok value
       | _ -> Error (name ^ " must contain strings"))
     |> Result.all
-    |> Result.map ~f:(fun values -> Some (Some values))
+    |> Result.map ~f:(fun values -> Domain.Patch.Set values)
   | Some _ -> Error (name ^ " must be an array")
+;;
+
+let article_tags values =
+  values
+  |> List.map ~f:(fun value ->
+    Domain.Article.Tag.of_string value
+    |> Result.of_option ~error:"tagList must contain non-empty strings")
+  |> Result.all
 ;;
 
 let metadata name description =
@@ -316,17 +327,14 @@ module Article_create_request = struct
     let%bind body = required_string article "body" in
     let%bind tag_list = optional_string_list article "tagList" in
     match tag_list with
-    | Some None -> Error "tagList must be an array"
-    | None | Some (Some _) ->
+    | Clear -> Error "tagList must be an array"
+    | Keep ->
       Ok
-        (Domain.Article.
-           { title
-           ; description
-           ; body
-           ; tag_list =
-               Option.value_map tag_list ~default:[] ~f:(Option.value ~default:[])
-           }
+        (Domain.Article.{ title; description; body; tag_list = [] }
          : Domain.Article.create)
+    | Set tag_list ->
+      let%map tag_list = article_tags tag_list in
+      (Domain.Article.{ title; description; body; tag_list } : Domain.Article.create)
   ;;
 end
 
@@ -347,9 +355,11 @@ module Article_update_request = struct
     let%bind body = optional_string article "body" in
     let%bind tag_list = optional_string_list article "tagList" in
     match tag_list with
-    | Some None -> Ok Invalid_tag_list
-    | None | Some (Some _) ->
-      Ok (Valid Domain.Article.{ title; description; body; tag_list })
+    | Clear -> Ok Invalid_tag_list
+    | Keep -> Ok (Valid Domain.Article.{ title; description; body; tag_list = None })
+    | Set tag_list ->
+      let%map tag_list = article_tags tag_list in
+      Valid Domain.Article.{ title; description; body; tag_list = Some tag_list }
   ;;
 end
 

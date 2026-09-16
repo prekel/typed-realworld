@@ -19,7 +19,8 @@ struct
       { database; issue; verify }
     in
     Endpoint.compile_exn
-      ([ Users_controller.group dependencies; Comments_controller.group dependencies ]
+      (Users_controller.groups dependencies
+       @ Comments_controller.groups dependencies
        @ Articles_controller.groups dependencies)
   ;;
 end

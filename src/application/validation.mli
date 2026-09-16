@@ -7,7 +7,11 @@ val combine : t list -> t
 val is_empty : t -> bool
 val blank : string -> bool
 val normalized_identity : string -> string -> (string, t) Result.t
-val normalized_optional_text : string option option -> string option option
+
+val normalized_optional_text
+  :  string Realworld_domain.Domain.Patch.t
+  -> string Realworld_domain.Domain.Patch.t
+
 val password : string -> (string, t) Result.t
 
 val article_create

@@ -35,20 +35,7 @@ let feed ~conn ~viewer_id ~page:pagination =
 ;;
 
 let find ~conn ~viewer_id ~slug = read_article ~conn ~viewer_id slug
-let tag_by_name ~conn name = Article_queries.tag_by_name name |> fetch_opt ~conn
-
-let ensure_tag ~conn name =
-  let%bind found = tag_by_name ~conn name in
-  match found with
-  | Error _ as error -> Lwt.return error
-  | Ok (Some tag) -> Lwt.return (Ok tag)
-  | Ok None ->
-    let insert = Article_queries.insert_tag name in
-    let%map inserted = fetch_one ~conn insert in
-    (match inserted with
-     | Ok tag -> Ok tag
-     | Error error -> Error error)
-;;
+let ensure_tag ~conn name = Article_queries.upsert_tag name |> fetch_one ~conn
 
 let rec sync_tags ~conn ~article_id names index =
   match names with
@@ -69,7 +56,7 @@ let rec sync_tags ~conn ~article_id names index =
 
 let normalize_tags tags =
   List.fold tags ~init:[] ~f:(fun unique tag ->
-    if List.mem unique tag ~equal:String.equal then
+    if List.mem unique tag ~equal:Domain.Article.Tag.equal then
       unique
     else
       unique @ [ tag ])
@@ -90,7 +77,12 @@ let create ~conn ~author_id ~slug ~now (article : Domain.Article.create) =
     (match synced with
      | Error error -> Lwt.return (Error (`Persistence error))
      | Ok () ->
-       let%map reread = read_article ~conn ~viewer_id:(Some author_id) row.slug in
+       let%map reread =
+         read_article
+           ~conn
+           ~viewer_id:(Some author_id)
+           (Domain.Article.Slug.of_string_exn row.slug)
+       in
        (match reread with
         | Ok (Some article) -> Ok article
         | Ok None ->
@@ -107,13 +99,15 @@ let update ~conn ~author_id ~slug ~new_slug ~now (changes : Domain.Article.updat
     let%bind raw = Article_queries.by_slug slug |> fetch_one ~conn in
     (match raw with
      | Error error -> Lwt.return (Error (`Persistence error))
-     | Ok raw when not (Int64.equal raw.author_id (id_of_int author_id)) ->
+     | Ok raw when not (Int64.equal raw.author_id (Domain.User.Id.to_int64 author_id)) ->
        Lwt.return (Error `Forbidden)
      | Ok raw ->
        let title = Option.value changes.title ~default:raw.title in
        let description = Option.value changes.description ~default:raw.description in
        let body = Option.value changes.body ~default:raw.body in
-       let slug' = Option.value new_slug ~default:raw.slug in
+       let slug' =
+         Option.value new_slug ~default:(Domain.Article.Slug.of_string_exn raw.slug)
+       in
        let update =
          Article_queries.update ~id:raw.id ~slug:slug' ~title ~description ~body ~now
        in
@@ -124,9 +118,7 @@ let update ~conn ~author_id ~slug ~new_slug ~now (changes : Domain.Article.updat
           let%bind tag_changed =
             match changes.tag_list with
             | None -> Lwt.return (Ok ())
-            | Some None ->
-              Lwt.return (Error (Persistence_error.of_string "tagList must not be null"))
-            | Some (Some names) ->
+            | Some names ->
               let delete = Article_queries.clear_tags raw.id in
               let%bind removed = execute_unit ~conn delete in
               (match removed with
@@ -150,8 +142,8 @@ let delete ~conn ~author_id ~slug =
   match raw with
   | Error error -> Lwt.return (Error (`Persistence error))
   | Ok None -> Lwt.return (Error `Not_found)
-  | Ok (Some raw) when not (Int64.equal raw.author_id (id_of_int author_id)) ->
-    Lwt.return (Error `Forbidden)
+  | Ok (Some raw) when not (Int64.equal raw.author_id (Domain.User.Id.to_int64 author_id))
+    -> Lwt.return (Error `Forbidden)
   | Ok (Some raw) ->
     let command = Article_queries.delete raw.id in
     let%map deleted = execute_unit ~conn command in

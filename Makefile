@@ -1,6 +1,10 @@
 all: build
 
 PACKAGES = ./typed-realworld.opam
+TYPED_ENDPOINT_VERSION = 0.1.0
+TYPED_SQL_VERSION = 0.1.1
+TYPED_ENDPOINT_DIR ?= ../typed-endpoint-v0.1.0
+TYPED_SQL_DIR ?= ../typed-sql-v0.1.1
 export NAME
 export DBMATE_BIN ?= $(CURDIR)/.tools/bin/dbmate
 export HURL_BIN ?= $(CURDIR)/.tools/bin/hurl
@@ -12,14 +16,15 @@ create_switch:
 
 .PHONY: pins
 pins:
-	opam pin add --kind=path typed-endpoint ../typed-endpoint -yn
-	opam pin add --kind=path typed-endpoint-opium ../typed-endpoint -yn
-	opam pin add --kind=path typed-endpoint-testing ../typed-endpoint -yn
-	opam pin add --kind=path typed-sql ../typed-sql -yn
-	opam pin add --kind=path typed-sql-caqti-lwt ../typed-sql -yn
+	opam pin add --kind=path typed-endpoint.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_DIR) -yn
+	opam pin add --kind=path typed-endpoint-opium.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_DIR) -yn
+	opam pin add --kind=path typed-endpoint-testing.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_DIR) -yn
+	opam pin add --kind=path typed-sql.$(TYPED_SQL_VERSION) $(TYPED_SQL_DIR) -yn
+	opam pin add --kind=path typed-sql-caqti-lwt.$(TYPED_SQL_VERSION) $(TYPED_SQL_DIR) -yn
 
 .PHONY: metadata
 metadata:
+	rm -f typed-realworld.opam
 	opam exec -- dune build --root . typed-realworld.opam
 	install -m 644 _build/default/typed-realworld.opam.generated typed-realworld.opam
 

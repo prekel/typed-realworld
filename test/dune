@@ -3,6 +3,11 @@
  (modules security_test)
  (libraries base mirage-crypto-rng.unix realworld_domain realworld_security))
 
+(test
+ (name domain_test)
+ (modules domain_test)
+ (libraries base realworld_domain))
+
 (library
  (name queries_test)
  (modules queries_test)

@@ -19,14 +19,14 @@ let normalized_identity field_name value =
 ;;
 
 let normalized_optional_text = function
-  | None -> None
-  | Some None -> Some None
-  | Some (Some value) ->
+  | Realworld_domain.Domain.Patch.Keep -> Realworld_domain.Domain.Patch.Keep
+  | Clear -> Realworld_domain.Domain.Patch.Clear
+  | Set value ->
     let value = String.strip value in
     if String.is_empty value then
-      Some None
+      Realworld_domain.Domain.Patch.Clear
     else
-      Some (Some value)
+      Realworld_domain.Domain.Patch.Set value
 ;;
 
 let password value =

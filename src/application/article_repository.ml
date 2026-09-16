@@ -26,13 +26,13 @@ module type S = sig
   val find
     :  conn:connection
     -> viewer_id:Domain.User.id option
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (Domain.Article.t option, Persistence_error.t) Result.t io
 
   val create
     :  conn:connection
     -> author_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> now:Ptime.t
     -> Domain.Article.create
     -> (Domain.Article.t, [ `Slug_taken | `Persistence of Persistence_error.t ]) Result.t
@@ -41,8 +41,8 @@ module type S = sig
   val update
     :  conn:connection
     -> author_id:Domain.User.id
-    -> slug:string
-    -> new_slug:string option
+    -> slug:Domain.Article.Slug.t
+    -> new_slug:Domain.Article.Slug.t option
     -> now:Ptime.t
     -> Domain.Article.update
     -> ( Domain.Article.t
@@ -54,21 +54,21 @@ module type S = sig
   val delete
     :  conn:connection
     -> author_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (unit, [ `Forbidden | `Not_found | `Persistence of Persistence_error.t ]) Result.t
          io
 
   val favorite
     :  conn:connection
     -> user_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (Domain.Article.t, [ `Not_found | `Persistence of Persistence_error.t ]) Result.t
          io
 
   val unfavorite
     :  conn:connection
     -> user_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> (Domain.Article.t, [ `Not_found | `Persistence of Persistence_error.t ]) Result.t
          io
 

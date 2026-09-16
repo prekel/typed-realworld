@@ -46,7 +46,7 @@ let update ~conn ~id (changes : Application.User_repository.changes) =
      | Ok (Some _) -> Lwt.return (Error `Email_taken)
      | Ok None ->
        let%bind duplicate_username =
-         if String.equal username current.username then
+         if Domain.User.Username.equal username current.username then
            Lwt.return (Ok None)
          else
            find_by_username ~conn username
@@ -58,8 +58,8 @@ let update ~conn ~id (changes : Application.User_repository.changes) =
           let password_hash =
             Option.value changes.password_hash ~default:current.password_hash
           in
-          let bio = Option.value changes.bio ~default:current.bio in
-          let image = Option.value changes.image ~default:current.image in
+          let bio = Domain.Patch.apply changes.bio ~current:current.bio in
+          let image = Domain.Patch.apply changes.image ~current:current.image in
           let update =
             User_queries.update ~id ~email ~username ~password_hash ~bio ~image
           in
@@ -76,7 +76,8 @@ let profile ~conn ~viewer_id ~username =
   | Ok all_users ->
     let%map all_follows = follows ~conn in
     Result.map all_follows ~f:(fun all_follows ->
-      List.find all_users ~f:(fun user -> String.equal user.Users.username username)
+      List.find all_users ~f:(fun user ->
+        String.equal user.Users.username (Domain.User.Username.to_string username))
       |> Option.map ~f:(profile_of_user ~viewer_id ~follows:all_follows))
 ;;
 
@@ -85,10 +86,11 @@ let follow ~conn ~follower_id ~username =
   match target with
   | Error error -> Lwt.return (Error (`Persistence error))
   | Ok None -> Lwt.return (Error `Not_found)
-  | Ok (Some target) when Int64.equal target.id (id_of_int follower_id) ->
+  | Ok (Some target) when Int64.equal target.id (Domain.User.Id.to_int64 follower_id) ->
     Lwt.return (Error `Cannot_follow_self)
   | Ok (Some target) ->
-    let command = User_queries.follow ~follower_id ~followed_id:target.id in
+    let followed_id = Domain.User.Id.of_int64_exn target.id in
+    let command = User_queries.follow ~follower_id ~followed_id in
     let%bind inserted = execute_unit ~conn command in
     (match inserted with
      | Error error -> Lwt.return (Error (`Persistence error))
@@ -105,7 +107,8 @@ let unfollow ~conn ~follower_id ~username =
   | Error error -> Lwt.return (Error (`Persistence error))
   | Ok None -> Lwt.return (Error `Not_found)
   | Ok (Some target) ->
-    let command = User_queries.unfollow ~follower_id ~followed_id:target.id in
+    let followed_id = Domain.User.Id.of_int64_exn target.id in
+    let command = User_queries.unfollow ~follower_id ~followed_id in
     let%bind deleted = execute_unit ~conn command in
     (match deleted with
      | Error error -> Lwt.return (Error (`Persistence error))

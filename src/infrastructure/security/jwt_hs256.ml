@@ -1,4 +1,5 @@
 open! Base
+module Domain = Realworld_domain.Domain
 
 let encode value = Base64.encode_exn ~pad:false ~alphabet:Base64.uri_safe_alphabet value
 
@@ -44,7 +45,7 @@ let create ~secret =
       let payload =
         Yojson.Safe.to_string
           (`Assoc
-              [ "sub", `String (Int.to_string user_id)
+              [ "sub", `String (Domain.User.Id.to_string user_id)
               ; "iat", `Float now
               ; "exp", `Float (now +. (24. *. 60. *. 60.))
               ])
@@ -84,7 +85,7 @@ let create ~secret =
                     , json_number payload "exp" )
                   with
                   | Some "HS256", Some "JWT", Some subject, Some expiry
-                    when Float.(expiry > now) -> Int.of_string_opt subject
+                    when Float.(expiry > now) -> Domain.User.Id.of_string subject
                   | _ -> None)
                | _ -> None
              with

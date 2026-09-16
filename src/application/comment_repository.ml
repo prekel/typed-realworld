@@ -8,7 +8,7 @@ module type S = sig
   val list
     :  conn:connection
     -> viewer_id:Domain.User.id option
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> ( Domain.Comment.t list
          , [ `Article_not_found | `Persistence of Persistence_error.t ] )
          Result.t
@@ -17,7 +17,7 @@ module type S = sig
   val create
     :  conn:connection
     -> author_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> body:string
     -> now:Ptime.t
     -> ( Domain.Comment.t
@@ -28,7 +28,7 @@ module type S = sig
   val delete
     :  conn:connection
     -> author_id:Domain.User.id
-    -> slug:string
+    -> slug:Domain.Article.Slug.t
     -> comment_id:Domain.Comment.id
     -> ( unit
          , [ `Article_not_found
