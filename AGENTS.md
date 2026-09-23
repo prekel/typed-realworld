@@ -72,6 +72,12 @@
 - Публичные контракты и odoc-комментарии размещай в `.mli`.
 - SELECT записывай `Query.(from ... |> ... |> select ...)`; `select` ставь
   последним. DML оформляй аналогично через локальное открытие builder.
+- Переиспользуемый запрос оформляй operation-модулем с вложенным `Input.t` и
+  статическим значением `statement`, созданным через `Statement.Portable` при
+  инициализации модуля. Выполняй statements единым `Typed_sql_caqti_lwt.run`.
+- `Statement.Dynamic` используй только когда runtime input меняет неограниченную
+  форму SQL, например число элементов `IN`. Optional scalar filters выражай
+  nullable parameters, а небольшой конечный набор форм — `Statement.choose`.
 - Для insert-or-return существующей строки используй target-specific
   `Insert.on_conflict ... |> do_update ... |> returning`. Для идемпотентного
   добавления связи без чтения строки оставляй `on_conflict_do_nothing`.

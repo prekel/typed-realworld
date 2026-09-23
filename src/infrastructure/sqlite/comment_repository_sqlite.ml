@@ -5,7 +5,7 @@ open Lwt.Let_syntax
 type nonrec 'a io = 'a io
 type nonrec connection = connection
 
-let article_by_slug ~conn slug = Comment_queries.article_by_slug slug |> fetch_opt ~conn
+let article_by_slug ~conn slug = run ~conn Comment_queries.Article_by_slug.statement slug
 
 let comment_of_row ~viewer_id ~all_users ~all_follows row =
   match find_user_row all_users row.Comments.author_id with
@@ -27,7 +27,7 @@ let hydrate_comments ~conn ~viewer_id rows =
     |> List.map ~f:(fun row -> row.Comments.author_id)
     |> List.dedup_and_sort ~compare:Int64.compare
   in
-  let%bind found_users = fetch ~conn (User_queries.rows_by_ids author_ids) in
+  let%bind found_users = run ~conn User_queries.Rows_by_ids.statement author_ids in
   match found_users with
   | Error _ as error -> Lwt.return error
   | Ok all_users ->
@@ -35,7 +35,7 @@ let hydrate_comments ~conn ~viewer_id rows =
       match viewer_id with
       | None -> Lwt.return (Ok [])
       | Some viewer_id ->
-        fetch ~conn (User_queries.follows_for_authors ~viewer_id author_ids)
+        run ~conn User_queries.Follows_for_authors.statement { viewer_id; author_ids }
     in
     (match all_follows with
      | Error _ as error -> Lwt.return error
@@ -54,7 +54,7 @@ let list ~conn ~viewer_id ~slug =
   | Error error -> Lwt.return (Error (`Persistence error))
   | Ok None -> Lwt.return (Error `Article_not_found)
   | Ok (Some article) ->
-    let%bind listed = Comment_queries.by_article article.id |> fetch ~conn in
+    let%bind listed = run ~conn Comment_queries.By_article.statement article.id in
     (match listed with
      | Error error -> Lwt.return (Error (`Persistence error))
      | Ok rows ->
@@ -68,8 +68,10 @@ let create ~conn ~author_id ~slug ~body ~now =
   | Error error -> Lwt.return (Error (`Persistence error))
   | Ok None -> Lwt.return (Error `Article_not_found)
   | Ok (Some article) ->
-    let insert = Comment_queries.insert ~article_id:article.id ~author_id ~body ~now in
-    let%bind inserted = fetch_one ~conn insert in
+    let input : Comment_queries.Create_comment.Input.t =
+      { article_id = article.id; author_id; body; now }
+    in
+    let%bind inserted = run ~conn Comment_queries.Create_comment.statement input in
     (match inserted with
      | Error error -> Lwt.return (Error (`Persistence error))
      | Ok row ->
@@ -85,8 +87,10 @@ let delete ~conn ~author_id ~slug ~comment_id =
   | Ok None -> Lwt.return (Error `Article_not_found)
   | Ok (Some article) ->
     let%bind found =
-      Comment_queries.by_article_and_id ~article_id:article.id ~comment_id
-      |> fetch_opt ~conn
+      run
+        ~conn
+        Comment_queries.By_article_and_id.statement
+        { article_id = article.id; comment_id }
     in
     (match found with
      | Error error -> Lwt.return (Error (`Persistence error))
@@ -96,8 +100,9 @@ let delete ~conn ~author_id ~slug ~comment_id =
               (Int64.equal comment.Comments.author_id (Domain.User.Id.to_int64 author_id))
        -> Lwt.return (Error `Forbidden)
      | Ok (Some comment) ->
-       let command = Comment_queries.delete comment_id in
-       let%map deleted = execute_unit ~conn command in
+       let%map deleted =
+         run_unit ~conn Comment_queries.Delete_comment.statement comment_id
+       in
        (match deleted with
         | Ok () -> Ok ()
         | Error error -> Error (`Persistence error)))

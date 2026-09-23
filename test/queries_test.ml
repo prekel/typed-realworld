@@ -5,19 +5,7 @@ module Article_queries = Realworld_sqlite.Article_queries
 module Comment_queries = Realworld_sqlite.Comment_queries
 module User_queries = Realworld_sqlite.User_queries
 
-let compile_exn dialect query =
-  Compiler.compile ~dialect query
-  |> Result.map_error ~f:Compile_error.to_string
-  |> Result.ok_or_failwith
-  |> Compiled_query.sql
-;;
-
-let compile_command_exn dialect command =
-  Compiler.compile_command ~dialect command
-  |> Result.map_error ~f:Compile_error.to_string
-  |> Result.ok_or_failwith
-  |> Compiled_command.sql
-;;
+let compile_exn dialect statement input = Statement.sql_exn ~dialect ~input statement
 
 let filters : Domain.Article.filters =
   { tag = Some (Domain.Article.Tag.of_string_exn "ocaml")
@@ -47,8 +35,8 @@ let now =
 ;;
 
 let%expect_test "article page compiles filtering, ordering and pagination" =
-  let query = Article_queries.page ~filters ~followed_by:None ~page in
-  Stdlib.print_endline (compile_exn Dialect.Sqlite query);
+  let input : Article_queries.Page.Input.t = { filters; followed_by = None; page } in
+  Stdlib.print_endline (compile_exn Dialect.Sqlite Article_queries.Page.statement input);
   [%expect
     {|
     SELECT
@@ -63,48 +51,71 @@ let%expect_test "article page compiles filtering, ordering and pagination" =
     FROM "articles" AS t0
     WHERE
       (
-        (EXISTS (
-          SELECT
-            1
-          FROM "users" AS t1
-          WHERE
-            (
-              (t1."id" = t0."author_id")
-              AND (t1."username" = ?1)
-            )
-        ))
-        AND (EXISTS (
-          SELECT
-            1
-          FROM "article_tags" AS t1
-          INNER JOIN "tags" AS t2
-            ON (t1."tag_id" = t2."id")
-          WHERE
-            (
-              (t1."article_id" = t0."id")
-              AND (t2."name" = ?2)
-            )
-        ))
-        AND (EXISTS (
-          SELECT
-            1
-          FROM "favorites" AS t1
-          INNER JOIN "users" AS t2
-            ON (t1."user_id" = t2."id")
-          WHERE
-            (
-              (t1."article_id" = t0."id")
-              AND (t2."username" = ?3)
-            )
-        ))
+        (
+          (?1 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "users" AS t1
+            WHERE
+              (
+                (t1."id" = t0."author_id")
+                AND (t1."username" = ?1)
+              )
+          ))
+        )
+        AND (
+          (?2 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "article_tags" AS t1
+            INNER JOIN "tags" AS t2
+              ON (t1."tag_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."name" = ?2)
+              )
+          ))
+        )
+        AND (
+          (?3 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "favorites" AS t1
+            INNER JOIN "users" AS t2
+              ON (t1."user_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."username" = ?3)
+              )
+          ))
+        )
+        AND (
+          (?4 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "follows" AS t1
+            WHERE
+              (
+                (t1."follower_id" = ?4)
+                AND (t1."followed_id" = t0."author_id")
+              )
+          ))
+        )
       )
     ORDER BY
       t0."created_at" DESC,
       t0."id" DESC
-    LIMIT 20
-    OFFSET 40
+    LIMIT ?5
+    OFFSET ?6
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Postgresql query);
+  Stdlib.print_endline
+    (compile_exn Dialect.Postgresql Article_queries.Page.statement input);
   [%expect
     {|
     SELECT
@@ -119,52 +130,74 @@ let%expect_test "article page compiles filtering, ordering and pagination" =
     FROM "articles" AS t0
     WHERE
       (
-        (EXISTS (
-          SELECT
-            1
-          FROM "users" AS t1
-          WHERE
-            (
-              (t1."id" = t0."author_id")
-              AND (t1."username" = $1)
-            )
-        ))
-        AND (EXISTS (
-          SELECT
-            1
-          FROM "article_tags" AS t1
-          INNER JOIN "tags" AS t2
-            ON (t1."tag_id" = t2."id")
-          WHERE
-            (
-              (t1."article_id" = t0."id")
-              AND (t2."name" = $2)
-            )
-        ))
-        AND (EXISTS (
-          SELECT
-            1
-          FROM "favorites" AS t1
-          INNER JOIN "users" AS t2
-            ON (t1."user_id" = t2."id")
-          WHERE
-            (
-              (t1."article_id" = t0."id")
-              AND (t2."username" = $3)
-            )
-        ))
+        (
+          ($1 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "users" AS t1
+            WHERE
+              (
+                (t1."id" = t0."author_id")
+                AND (t1."username" = $1)
+              )
+          ))
+        )
+        AND (
+          ($2 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "article_tags" AS t1
+            INNER JOIN "tags" AS t2
+              ON (t1."tag_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."name" = $2)
+              )
+          ))
+        )
+        AND (
+          ($3 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "favorites" AS t1
+            INNER JOIN "users" AS t2
+              ON (t1."user_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."username" = $3)
+              )
+          ))
+        )
+        AND (
+          ($4 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "follows" AS t1
+            WHERE
+              (
+                (t1."follower_id" = $4)
+                AND (t1."followed_id" = t0."author_id")
+              )
+          ))
+        )
       )
     ORDER BY
       t0."created_at" DESC,
       t0."id" DESC
-    LIMIT 20
-    OFFSET 40
+    LIMIT $5
+    OFFSET $6
     |}]
 ;;
 
 let%expect_test "article count reuses exactly the page predicates" =
-  let query = Article_queries.count ~filters ~followed_by:None in
-  Stdlib.print_endline (compile_exn Dialect.Sqlite query);
+  let input : Article_queries.Count.Input.t = { filters; followed_by = None } in
+  Stdlib.print_endline (compile_exn Dialect.Sqlite Article_queries.Count.statement input);
   [%expect
     {|
     SELECT
@@ -172,43 +205,66 @@ let%expect_test "article count reuses exactly the page predicates" =
     FROM "articles" AS t0
     WHERE
       (
-        (EXISTS (
-          SELECT
-            1
-          FROM "users" AS t1
-          WHERE
-            (
-              (t1."id" = t0."author_id")
-              AND (t1."username" = ?1)
-            )
-        ))
-        AND (EXISTS (
-          SELECT
-            1
-          FROM "article_tags" AS t1
-          INNER JOIN "tags" AS t2
-            ON (t1."tag_id" = t2."id")
-          WHERE
-            (
-              (t1."article_id" = t0."id")
-              AND (t2."name" = ?2)
-            )
-        ))
-        AND (EXISTS (
-          SELECT
-            1
-          FROM "favorites" AS t1
-          INNER JOIN "users" AS t2
-            ON (t1."user_id" = t2."id")
-          WHERE
-            (
-              (t1."article_id" = t0."id")
-              AND (t2."username" = ?3)
-            )
-        ))
+        (
+          (?1 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "users" AS t1
+            WHERE
+              (
+                (t1."id" = t0."author_id")
+                AND (t1."username" = ?1)
+              )
+          ))
+        )
+        AND (
+          (?2 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "article_tags" AS t1
+            INNER JOIN "tags" AS t2
+              ON (t1."tag_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."name" = ?2)
+              )
+          ))
+        )
+        AND (
+          (?3 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "favorites" AS t1
+            INNER JOIN "users" AS t2
+              ON (t1."user_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."username" = ?3)
+              )
+          ))
+        )
+        AND (
+          (?4 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "follows" AS t1
+            WHERE
+              (
+                (t1."follower_id" = ?4)
+                AND (t1."followed_id" = t0."author_id")
+              )
+          ))
+        )
       )
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Postgresql query);
+  Stdlib.print_endline
+    (compile_exn Dialect.Postgresql Article_queries.Count.statement input);
   [%expect
     {|
     SELECT
@@ -216,52 +272,71 @@ let%expect_test "article count reuses exactly the page predicates" =
     FROM "articles" AS t0
     WHERE
       (
-        (EXISTS (
-          SELECT
-            1
-          FROM "users" AS t1
-          WHERE
-            (
-              (t1."id" = t0."author_id")
-              AND (t1."username" = $1)
-            )
-        ))
-        AND (EXISTS (
-          SELECT
-            1
-          FROM "article_tags" AS t1
-          INNER JOIN "tags" AS t2
-            ON (t1."tag_id" = t2."id")
-          WHERE
-            (
-              (t1."article_id" = t0."id")
-              AND (t2."name" = $2)
-            )
-        ))
-        AND (EXISTS (
-          SELECT
-            1
-          FROM "favorites" AS t1
-          INNER JOIN "users" AS t2
-            ON (t1."user_id" = t2."id")
-          WHERE
-            (
-              (t1."article_id" = t0."id")
-              AND (t2."username" = $3)
-            )
-        ))
+        (
+          ($1 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "users" AS t1
+            WHERE
+              (
+                (t1."id" = t0."author_id")
+                AND (t1."username" = $1)
+              )
+          ))
+        )
+        AND (
+          ($2 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "article_tags" AS t1
+            INNER JOIN "tags" AS t2
+              ON (t1."tag_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."name" = $2)
+              )
+          ))
+        )
+        AND (
+          ($3 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "favorites" AS t1
+            INNER JOIN "users" AS t2
+              ON (t1."user_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."username" = $3)
+              )
+          ))
+        )
+        AND (
+          ($4 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "follows" AS t1
+            WHERE
+              (
+                (t1."follower_id" = $4)
+                AND (t1."followed_id" = t0."author_id")
+              )
+          ))
+        )
       )
     |}]
 ;;
 
 let%expect_test "feed compiles as a correlated follows predicate" =
-  let query =
-    Article_queries.page
-      ~filters:Domain.Article.no_filters
-      ~followed_by:(Some user_42)
-      ~page
+  let input : Article_queries.Page.Input.t =
+    { filters = Domain.Article.no_filters; followed_by = Some user_42; page }
   in
-  Stdlib.print_endline (compile_exn Dialect.Sqlite query);
+  Stdlib.print_endline (compile_exn Dialect.Sqlite Article_queries.Page.statement input);
   [%expect
     {|
     SELECT
@@ -275,23 +350,72 @@ let%expect_test "feed compiles as a correlated follows predicate" =
       t0."updated_at"
     FROM "articles" AS t0
     WHERE
-      (EXISTS (
-        SELECT
-          1
-        FROM "follows" AS t1
-        WHERE
-          (
-            (t1."follower_id" = ?1)
-            AND (t1."followed_id" = t0."author_id")
-          )
-      ))
+      (
+        (
+          (?1 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "users" AS t1
+            WHERE
+              (
+                (t1."id" = t0."author_id")
+                AND (t1."username" = ?1)
+              )
+          ))
+        )
+        AND (
+          (?2 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "article_tags" AS t1
+            INNER JOIN "tags" AS t2
+              ON (t1."tag_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."name" = ?2)
+              )
+          ))
+        )
+        AND (
+          (?3 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "favorites" AS t1
+            INNER JOIN "users" AS t2
+              ON (t1."user_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."username" = ?3)
+              )
+          ))
+        )
+        AND (
+          (?4 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "follows" AS t1
+            WHERE
+              (
+                (t1."follower_id" = ?4)
+                AND (t1."followed_id" = t0."author_id")
+              )
+          ))
+        )
+      )
     ORDER BY
       t0."created_at" DESC,
       t0."id" DESC
-    LIMIT 20
-    OFFSET 40
+    LIMIT ?5
+    OFFSET ?6
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Postgresql query);
+  Stdlib.print_endline
+    (compile_exn Dialect.Postgresql Article_queries.Page.statement input);
   [%expect
     {|
     SELECT
@@ -305,29 +429,80 @@ let%expect_test "feed compiles as a correlated follows predicate" =
       t0."updated_at"
     FROM "articles" AS t0
     WHERE
-      (EXISTS (
-        SELECT
-          1
-        FROM "follows" AS t1
-        WHERE
-          (
-            (t1."follower_id" = $1)
-            AND (t1."followed_id" = t0."author_id")
-          )
-      ))
+      (
+        (
+          ($1 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "users" AS t1
+            WHERE
+              (
+                (t1."id" = t0."author_id")
+                AND (t1."username" = $1)
+              )
+          ))
+        )
+        AND (
+          ($2 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "article_tags" AS t1
+            INNER JOIN "tags" AS t2
+              ON (t1."tag_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."name" = $2)
+              )
+          ))
+        )
+        AND (
+          ($3 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "favorites" AS t1
+            INNER JOIN "users" AS t2
+              ON (t1."user_id" = t2."id")
+            WHERE
+              (
+                (t1."article_id" = t0."id")
+                AND (t2."username" = $3)
+              )
+          ))
+        )
+        AND (
+          ($4 IS NULL)
+          OR (EXISTS (
+            SELECT
+              1
+            FROM "follows" AS t1
+            WHERE
+              (
+                (t1."follower_id" = $4)
+                AND (t1."followed_id" = t0."author_id")
+              )
+          ))
+        )
+      )
     ORDER BY
       t0."created_at" DESC,
       t0."id" DESC
-    LIMIT 20
-    OFFSET 40
+    LIMIT $5
+    OFFSET $6
     |}]
 ;;
 
 let%expect_test "page hydration queries stay scoped to selected identifiers" =
   let article_ids = [ 101L; 102L ] in
   let author_ids = [ 7L; 8L ] in
-  let query = Article_queries.article_tags_by_article_ids article_ids in
-  Stdlib.print_endline (compile_exn Dialect.Sqlite query);
+  Stdlib.print_endline
+    (compile_exn
+       Dialect.Sqlite
+       Article_queries.Article_tags_by_article_ids.statement
+       article_ids);
   [%expect
     {|
     SELECT
@@ -341,7 +516,11 @@ let%expect_test "page hydration queries stay scoped to selected identifiers" =
         ?2
       ))
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Postgresql query);
+  Stdlib.print_endline
+    (compile_exn
+       Dialect.Postgresql
+       Article_queries.Article_tags_by_article_ids.statement
+       article_ids);
   [%expect
     {|
     SELECT
@@ -355,8 +534,8 @@ let%expect_test "page hydration queries stay scoped to selected identifiers" =
         $2
       ))
     |}];
-  let query = Article_queries.tags_by_article_ids article_ids in
-  Stdlib.print_endline (compile_exn Dialect.Sqlite query);
+  Stdlib.print_endline
+    (compile_exn Dialect.Sqlite Article_queries.Tags_by_article_ids.statement article_ids);
   [%expect
     {|
     SELECT
@@ -375,7 +554,11 @@ let%expect_test "page hydration queries stay scoped to selected identifiers" =
           ))
       ))
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Postgresql query);
+  Stdlib.print_endline
+    (compile_exn
+       Dialect.Postgresql
+       Article_queries.Tags_by_article_ids.statement
+       article_ids);
   [%expect
     {|
     SELECT
@@ -394,8 +577,11 @@ let%expect_test "page hydration queries stay scoped to selected identifiers" =
           ))
       ))
     |}];
-  let query = Article_queries.favorites_by_article_ids article_ids in
-  Stdlib.print_endline (compile_exn Dialect.Sqlite query);
+  Stdlib.print_endline
+    (compile_exn
+       Dialect.Sqlite
+       Article_queries.Favorites_by_article_ids.statement
+       article_ids);
   [%expect
     {|
     SELECT
@@ -408,7 +594,11 @@ let%expect_test "page hydration queries stay scoped to selected identifiers" =
         ?2
       ))
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Postgresql query);
+  Stdlib.print_endline
+    (compile_exn
+       Dialect.Postgresql
+       Article_queries.Favorites_by_article_ids.statement
+       article_ids);
   [%expect
     {|
     SELECT
@@ -421,8 +611,8 @@ let%expect_test "page hydration queries stay scoped to selected identifiers" =
         $2
       ))
     |}];
-  let query = User_queries.rows_by_ids author_ids in
-  Stdlib.print_endline (compile_exn Dialect.Sqlite query);
+  Stdlib.print_endline
+    (compile_exn Dialect.Sqlite User_queries.Rows_by_ids.statement author_ids);
   [%expect
     {|
     SELECT
@@ -439,7 +629,8 @@ let%expect_test "page hydration queries stay scoped to selected identifiers" =
         ?2
       ))
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Postgresql query);
+  Stdlib.print_endline
+    (compile_exn Dialect.Postgresql User_queries.Rows_by_ids.statement author_ids);
   [%expect
     {|
     SELECT
@@ -456,8 +647,11 @@ let%expect_test "page hydration queries stay scoped to selected identifiers" =
         $2
       ))
     |}];
-  let query = User_queries.follows_for_authors ~viewer_id:user_42 author_ids in
-  Stdlib.print_endline (compile_exn Dialect.Sqlite query);
+  let input : User_queries.Follows_for_authors.Input.t =
+    { viewer_id = user_42; author_ids }
+  in
+  Stdlib.print_endline
+    (compile_exn Dialect.Sqlite User_queries.Follows_for_authors.statement input);
   [%expect
     {|
     SELECT
@@ -473,7 +667,8 @@ let%expect_test "page hydration queries stay scoped to selected identifiers" =
         ))
       )
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Postgresql query);
+  Stdlib.print_endline
+    (compile_exn Dialect.Postgresql User_queries.Follows_for_authors.statement input);
   [%expect
     {|
     SELECT
@@ -492,7 +687,7 @@ let%expect_test "page hydration queries stay scoped to selected identifiers" =
 ;;
 
 let%expect_test "remaining article read queries compile" =
-  Stdlib.print_endline (compile_exn Dialect.Sqlite (Article_queries.all ()));
+  Stdlib.print_endline (compile_exn Dialect.Sqlite Article_queries.All.statement ());
   [%expect
     {|
     SELECT
@@ -506,7 +701,7 @@ let%expect_test "remaining article read queries compile" =
       t0."updated_at"
     FROM "articles" AS t0
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Sqlite (Article_queries.all_tags ()));
+  Stdlib.print_endline (compile_exn Dialect.Sqlite Article_queries.All_tags.statement ());
   [%expect
     {|
     SELECT
@@ -514,7 +709,8 @@ let%expect_test "remaining article read queries compile" =
       t0."name"
     FROM "tags" AS t0
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Sqlite (Article_queries.all_article_tags ()));
+  Stdlib.print_endline
+    (compile_exn Dialect.Sqlite Article_queries.All_article_tags.statement ());
   [%expect
     {|
     SELECT
@@ -523,7 +719,8 @@ let%expect_test "remaining article read queries compile" =
       t0."position"
     FROM "article_tags" AS t0
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Sqlite (Article_queries.all_favorites ()));
+  Stdlib.print_endline
+    (compile_exn Dialect.Sqlite Article_queries.All_favorites.statement ());
   [%expect
     {|
     SELECT
@@ -532,7 +729,7 @@ let%expect_test "remaining article read queries compile" =
     FROM "favorites" AS t0
     |}];
   Stdlib.print_endline
-    (compile_exn Dialect.Sqlite (Article_queries.by_slug (slug "typed-sql")));
+    (compile_exn Dialect.Sqlite Article_queries.By_slug.statement (slug "typed-sql"));
   [%expect
     {|
     SELECT
@@ -558,10 +755,17 @@ let%expect_test "article write queries compile" =
     ; tag_list = [ tag "ocaml"; tag "sql" ]
     }
   in
+  let insert : Article_queries.Create_article.Input.t =
+    { author_id = user_7
+    ; slug = slug "typed-sql"
+    ; title = article.title
+    ; description = article.description
+    ; body = article.body
+    ; now
+    }
+  in
   Stdlib.print_endline
-    (compile_exn
-       Dialect.Sqlite
-       (Article_queries.insert ~author_id:user_7 ~slug:(slug "typed-sql") ~now article));
+    (compile_exn Dialect.Sqlite Article_queries.Create_article.statement insert);
   [%expect
     {|
     INSERT INTO "articles" (
@@ -574,7 +778,7 @@ let%expect_test "article write queries compile" =
       "updated_at"
     )
     VALUES
-      (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+      (?1, ?2, ?3, ?4, ?5, ?6, ?6)
     RETURNING
       "id",
       "author_id",
@@ -586,15 +790,16 @@ let%expect_test "article write queries compile" =
       "updated_at"
     |}];
   Stdlib.print_endline
-    (compile_command_exn
+    (compile_exn
        Dialect.Sqlite
-       (Article_queries.update
-          ~id:101L
-          ~slug:(slug "typed-sql-updated")
-          ~title:"Typed SQL updated"
-          ~description:"Updated description"
-          ~body:"Updated body"
-          ~now));
+       Article_queries.Update_article.statement
+       { id = 101L
+       ; slug = slug "typed-sql-updated"
+       ; title = "Typed SQL updated"
+       ; description = "Updated description"
+       ; body = "Updated body"
+       ; now
+       });
   [%expect
     {|
     UPDATE "articles"
@@ -607,15 +812,16 @@ let%expect_test "article write queries compile" =
     WHERE
       ("id" = ?6)
     |}];
-  Stdlib.print_endline (compile_command_exn Dialect.Sqlite (Article_queries.delete 101L));
+  Stdlib.print_endline
+    (compile_exn Dialect.Sqlite Article_queries.Delete_article.statement 101L);
   [%expect
     {|
     DELETE FROM "articles"
     WHERE
       ("id" = ?1)
     |}];
-  let upsert_tag = Article_queries.upsert_tag (tag "ocaml") in
-  Stdlib.print_endline (compile_exn Dialect.Sqlite upsert_tag);
+  Stdlib.print_endline
+    (compile_exn Dialect.Sqlite Article_queries.Upsert_tag.statement (tag "ocaml"));
   [%expect
     {|
     INSERT INTO "tags" AS t0 (
@@ -633,7 +839,8 @@ let%expect_test "article write queries compile" =
       "id",
       "name"
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Postgresql upsert_tag);
+  Stdlib.print_endline
+    (compile_exn Dialect.Postgresql Article_queries.Upsert_tag.statement (tag "ocaml"));
   [%expect
     {|
     INSERT INTO "tags" AS t0 (
@@ -652,7 +859,7 @@ let%expect_test "article write queries compile" =
       "name"
     |}];
   Stdlib.print_endline
-    (compile_command_exn Dialect.Sqlite (Article_queries.clear_tags 101L));
+    (compile_exn Dialect.Sqlite Article_queries.Clear_tags.statement 101L);
   [%expect
     {|
     DELETE FROM "article_tags"
@@ -660,9 +867,10 @@ let%expect_test "article write queries compile" =
       ("article_id" = ?1)
     |}];
   Stdlib.print_endline
-    (compile_command_exn
+    (compile_exn
        Dialect.Sqlite
-       (Article_queries.attach_tag ~article_id:101L ~tag_id:5L ~position:1));
+       Article_queries.Attach_tag.statement
+       { article_id = 101L; tag_id = 5L; position = 1 });
   [%expect
     {|
     INSERT INTO "article_tags" (
@@ -674,9 +882,10 @@ let%expect_test "article write queries compile" =
       (?1, ?2, ?3)
     |}];
   Stdlib.print_endline
-    (compile_command_exn
+    (compile_exn
        Dialect.Sqlite
-       (Article_queries.add_favorite ~user_id:user_7 ~article_id:101L));
+       Article_queries.Add_favorite.statement
+       { user_id = user_7; article_id = 101L });
   [%expect
     {|
     INSERT INTO "favorites" (
@@ -688,9 +897,10 @@ let%expect_test "article write queries compile" =
     ON CONFLICT DO NOTHING
     |}];
   Stdlib.print_endline
-    (compile_command_exn
+    (compile_exn
        Dialect.Sqlite
-       (Article_queries.remove_favorite ~user_id:user_7 ~article_id:101L));
+       Article_queries.Remove_favorite.statement
+       { user_id = user_7; article_id = 101L });
   [%expect
     {|
     DELETE FROM "favorites"
@@ -704,7 +914,10 @@ let%expect_test "article write queries compile" =
 
 let%expect_test "comment queries compile" =
   Stdlib.print_endline
-    (compile_exn Dialect.Sqlite (Comment_queries.article_by_slug (slug "typed-sql")));
+    (compile_exn
+       Dialect.Sqlite
+       Comment_queries.Article_by_slug.statement
+       (slug "typed-sql"));
   [%expect
     {|
     SELECT
@@ -720,7 +933,7 @@ let%expect_test "comment queries compile" =
     WHERE
       (t0."slug" = ?1)
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Sqlite (Comment_queries.all ()));
+  Stdlib.print_endline (compile_exn Dialect.Sqlite Comment_queries.All.statement ());
   [%expect
     {|
     SELECT
@@ -732,7 +945,8 @@ let%expect_test "comment queries compile" =
       t0."updated_at"
     FROM "comments" AS t0
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Sqlite (Comment_queries.by_article 101L));
+  Stdlib.print_endline
+    (compile_exn Dialect.Sqlite Comment_queries.By_article.statement 101L);
   [%expect
     {|
     SELECT
@@ -752,7 +966,8 @@ let%expect_test "comment queries compile" =
   Stdlib.print_endline
     (compile_exn
        Dialect.Sqlite
-       (Comment_queries.by_article_and_id ~article_id:101L ~comment_id:comment_3));
+       Comment_queries.By_article_and_id.statement
+       { article_id = 101L; comment_id = comment_3 });
   [%expect
     {|
     SELECT
@@ -772,7 +987,8 @@ let%expect_test "comment queries compile" =
   Stdlib.print_endline
     (compile_exn
        Dialect.Sqlite
-       (Comment_queries.insert ~article_id:101L ~author_id:user_7 ~body:"A comment" ~now));
+       Comment_queries.Create_comment.statement
+       { article_id = 101L; author_id = user_7; body = "A comment"; now });
   [%expect
     {|
     INSERT INTO "comments" (
@@ -783,7 +999,7 @@ let%expect_test "comment queries compile" =
       "updated_at"
     )
     VALUES
-      (?1, ?2, ?3, ?4, ?5)
+      (?1, ?2, ?3, ?4, ?4)
     RETURNING
       "id",
       "article_id",
@@ -793,7 +1009,7 @@ let%expect_test "comment queries compile" =
       "updated_at"
     |}];
   Stdlib.print_endline
-    (compile_command_exn Dialect.Sqlite (Comment_queries.delete comment_3));
+    (compile_exn Dialect.Sqlite Comment_queries.Delete_comment.statement comment_3);
   [%expect
     {|
     DELETE FROM "comments"
@@ -803,7 +1019,7 @@ let%expect_test "comment queries compile" =
 ;;
 
 let%expect_test "remaining user queries compile" =
-  Stdlib.print_endline (compile_exn Dialect.Sqlite (User_queries.all_rows ()));
+  Stdlib.print_endline (compile_exn Dialect.Sqlite User_queries.All_rows.statement ());
   [%expect
     {|
     SELECT
@@ -815,7 +1031,7 @@ let%expect_test "remaining user queries compile" =
       t0."image"
     FROM "users" AS t0
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Sqlite (User_queries.all_follows ()));
+  Stdlib.print_endline (compile_exn Dialect.Sqlite User_queries.All_follows.statement ());
   [%expect
     {|
     SELECT
@@ -823,7 +1039,7 @@ let%expect_test "remaining user queries compile" =
       t0."followed_id"
     FROM "follows" AS t0
     |}];
-  Stdlib.print_endline (compile_exn Dialect.Sqlite (User_queries.by_id user_7));
+  Stdlib.print_endline (compile_exn Dialect.Sqlite User_queries.By_id.statement user_7);
   [%expect
     {|
     SELECT
@@ -838,7 +1054,7 @@ let%expect_test "remaining user queries compile" =
       (t0."id" = ?1)
     |}];
   Stdlib.print_endline
-    (compile_exn Dialect.Sqlite (User_queries.by_email "alice@example.com"));
+    (compile_exn Dialect.Sqlite User_queries.By_email.statement "alice@example.com");
   [%expect
     {|
     SELECT
@@ -853,7 +1069,7 @@ let%expect_test "remaining user queries compile" =
       (t0."email" = ?1)
     |}];
   Stdlib.print_endline
-    (compile_exn Dialect.Sqlite (User_queries.by_username (username "alice")));
+    (compile_exn Dialect.Sqlite User_queries.By_username.statement (username "alice"));
   [%expect
     {|
     SELECT
@@ -870,10 +1086,11 @@ let%expect_test "remaining user queries compile" =
   Stdlib.print_endline
     (compile_exn
        Dialect.Sqlite
-       (User_queries.insert
-          ~email:"alice@example.com"
-          ~username:(username "alice")
-          ~password_hash:"hash"));
+       User_queries.Create_user.statement
+       { email = "alice@example.com"
+       ; username = username "alice"
+       ; password_hash = "hash"
+       });
   [%expect
     {|
     INSERT INTO "users" (
@@ -896,13 +1113,14 @@ let%expect_test "remaining user queries compile" =
   Stdlib.print_endline
     (compile_exn
        Dialect.Sqlite
-       (User_queries.update
-          ~id:user_7
-          ~email:"alice@example.com"
-          ~username:(username "alice")
-          ~password_hash:"new-hash"
-          ~bio:(Some "OCaml developer")
-          ~image:None));
+       User_queries.Update_user.statement
+       { id = user_7
+       ; email = "alice@example.com"
+       ; username = username "alice"
+       ; password_hash = "new-hash"
+       ; bio = Some "OCaml developer"
+       ; image = None
+       });
   [%expect
     {|
     UPDATE "users"
@@ -923,9 +1141,10 @@ let%expect_test "remaining user queries compile" =
       "image"
     |}];
   Stdlib.print_endline
-    (compile_command_exn
+    (compile_exn
        Dialect.Sqlite
-       (User_queries.follow ~follower_id:user_7 ~followed_id:user_8));
+       User_queries.Follow_user.statement
+       { follower_id = user_7; followed_id = user_8 });
   [%expect
     {|
     INSERT INTO "follows" (
@@ -937,9 +1156,10 @@ let%expect_test "remaining user queries compile" =
     ON CONFLICT DO NOTHING
     |}];
   Stdlib.print_endline
-    (compile_command_exn
+    (compile_exn
        Dialect.Sqlite
-       (User_queries.unfollow ~follower_id:user_7 ~followed_id:user_8));
+       User_queries.Unfollow_user.statement
+       { follower_id = user_7; followed_id = user_8 });
   [%expect
     {|
     DELETE FROM "follows"

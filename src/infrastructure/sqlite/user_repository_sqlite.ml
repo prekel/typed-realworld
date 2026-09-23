@@ -5,9 +5,12 @@ open Lwt.Let_syntax
 type nonrec 'a io = 'a io
 type nonrec connection = connection
 
-let find_by_id ~conn id = User_queries.by_id id |> fetch_opt ~conn
-let find_by_email ~conn email = User_queries.by_email email |> fetch_opt ~conn
-let find_by_username ~conn username = User_queries.by_username username |> fetch_opt ~conn
+let find_by_id ~conn id = run ~conn User_queries.By_id.statement id
+let find_by_email ~conn email = run ~conn User_queries.By_email.statement email
+
+let find_by_username ~conn username =
+  run ~conn User_queries.By_username.statement username
+;;
 
 let create ~conn ~email ~username ~password_hash =
   let%bind email_exists = find_by_email ~conn email in
@@ -20,8 +23,10 @@ let create ~conn ~email ~username ~password_hash =
      | Error error -> Lwt.return (Error (`Persistence error))
      | Ok (Some _) -> Lwt.return (Error `Username_taken)
      | Ok None ->
-       let insert = User_queries.insert ~email ~username ~password_hash in
-       let%map inserted = fetch_one ~conn insert in
+       let input : User_queries.Create_user.Input.t =
+         { email; username; password_hash }
+       in
+       let%map inserted = run ~conn User_queries.Create_user.statement input in
        (match inserted with
         | Ok row -> Ok (user_of_row row)
         | Error error -> Error (`Persistence error)))
@@ -60,10 +65,10 @@ let update ~conn ~id (changes : Application.User_repository.changes) =
           in
           let bio = Domain.Patch.apply changes.bio ~current:current.bio in
           let image = Domain.Patch.apply changes.image ~current:current.image in
-          let update =
-            User_queries.update ~id ~email ~username ~password_hash ~bio ~image
+          let input : User_queries.Update_user.Input.t =
+            { id; email; username; password_hash; bio; image }
           in
-          let%map updated = fetch_one ~conn update in
+          let%map updated = run ~conn User_queries.Update_user.statement input in
           (match updated with
            | Ok row -> Ok (user_of_row row)
            | Error error -> Error (`Persistence error))))
@@ -90,8 +95,8 @@ let follow ~conn ~follower_id ~username =
     Lwt.return (Error `Cannot_follow_self)
   | Ok (Some target) ->
     let followed_id = Domain.User.Id.of_int64_exn target.id in
-    let command = User_queries.follow ~follower_id ~followed_id in
-    let%bind inserted = execute_unit ~conn command in
+    let input : User_queries.Follow_user.Input.t = { follower_id; followed_id } in
+    let%bind inserted = run_unit ~conn User_queries.Follow_user.statement input in
     (match inserted with
      | Error error -> Lwt.return (Error (`Persistence error))
      | Ok () ->
@@ -108,8 +113,8 @@ let unfollow ~conn ~follower_id ~username =
   | Ok None -> Lwt.return (Error `Not_found)
   | Ok (Some target) ->
     let followed_id = Domain.User.Id.of_int64_exn target.id in
-    let command = User_queries.unfollow ~follower_id ~followed_id in
-    let%bind deleted = execute_unit ~conn command in
+    let input : User_queries.Unfollow_user.Input.t = { follower_id; followed_id } in
+    let%bind deleted = run_unit ~conn User_queries.Unfollow_user.statement input in
     (match deleted with
      | Error error -> Lwt.return (Error (`Persistence error))
      | Ok () ->

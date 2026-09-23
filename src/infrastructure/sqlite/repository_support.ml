@@ -20,28 +20,13 @@ type connection = Caqti_lwt.connection
 
 let persistence error = Persistence_error.of_string (Adapter.error_to_string error)
 
-let fetch ~conn query =
-  let%map result = Adapter.fetch ~conn query in
+let run ~conn statement input =
+  let%map result = Adapter.run ~conn statement input in
   Result.map_error result ~f:persistence
 ;;
 
-let fetch_one ~conn query =
-  let%map result = Adapter.fetch_one ~conn query in
-  Result.map_error result ~f:persistence
-;;
-
-let fetch_opt ~conn query =
-  let%map result = Adapter.fetch_opt ~conn query in
-  Result.map_error result ~f:persistence
-;;
-
-let execute ~conn command =
-  let%map result = Adapter.execute ~conn command in
-  Result.map_error result ~f:persistence
-;;
-
-let execute_unit ~conn command =
-  let%map result = execute ~conn command in
+let run_unit ~conn statement input =
+  let%map result = run ~conn statement input in
   Result.map result ~f:(fun _ -> ())
 ;;
 
@@ -71,10 +56,10 @@ let profile_of_user ~viewer_id ~follows user =
     }
 ;;
 
-let users ~conn = fetch ~conn (User_queries.all_rows ())
-let follows ~conn = fetch ~conn (User_queries.all_follows ())
-let tags ~conn = fetch ~conn (Article_queries.all_tags ())
-let comments ~conn = fetch ~conn (Comment_queries.all ())
+let users ~conn = run ~conn User_queries.All_rows.statement ()
+let follows ~conn = run ~conn User_queries.All_follows.statement ()
+let tags ~conn = run ~conn Article_queries.All_tags.statement ()
+let comments ~conn = run ~conn Comment_queries.All.statement ()
 let find_user_row rows id = List.find rows ~f:(fun row -> Int64.equal row.Users.id id)
 
 let find_article_row rows slug =
@@ -138,7 +123,7 @@ let hydrate_articles ~conn ~viewer_id rows =
     List.map rows ~f:(fun row -> row.Articles.author_id)
     |> List.dedup_and_sort ~compare:Int64.compare
   in
-  let%bind found_users = fetch ~conn (User_queries.rows_by_ids author_ids) in
+  let%bind found_users = run ~conn User_queries.Rows_by_ids.statement author_ids in
   match found_users with
   | Error _ as error -> Lwt.return error
   | Ok all_users ->
@@ -146,25 +131,25 @@ let hydrate_articles ~conn ~viewer_id rows =
       match viewer_id with
       | None -> Lwt.return (Ok [])
       | Some viewer_id ->
-        fetch ~conn (User_queries.follows_for_authors ~viewer_id author_ids)
+        run ~conn User_queries.Follows_for_authors.statement { viewer_id; author_ids }
     in
     (match all_follows with
      | Error _ as error -> Lwt.return error
      | Ok all_follows ->
        let%bind all_tags =
-         fetch ~conn (Article_queries.tags_by_article_ids article_ids)
+         run ~conn Article_queries.Tags_by_article_ids.statement article_ids
        in
        (match all_tags with
         | Error _ as error -> Lwt.return error
         | Ok all_tags ->
           let%bind all_article_tags =
-            fetch ~conn (Article_queries.article_tags_by_article_ids article_ids)
+            run ~conn Article_queries.Article_tags_by_article_ids.statement article_ids
           in
           (match all_article_tags with
            | Error _ as error -> Lwt.return error
            | Ok all_article_tags ->
              let%map all_favorites =
-               fetch ~conn (Article_queries.favorites_by_article_ids article_ids)
+               run ~conn Article_queries.Favorites_by_article_ids.statement article_ids
              in
              Result.bind all_favorites ~f:(fun all_favorites ->
                List.map
@@ -181,7 +166,7 @@ let hydrate_articles ~conn ~viewer_id rows =
 ;;
 
 let read_article ~conn ~viewer_id slug =
-  let%bind found = fetch_opt ~conn (Article_queries.by_slug slug) in
+  let%bind found = run ~conn Article_queries.By_slug.statement slug in
   match found with
   | Error _ as error -> Lwt.return error
   | Ok None -> Lwt.return (Ok None)

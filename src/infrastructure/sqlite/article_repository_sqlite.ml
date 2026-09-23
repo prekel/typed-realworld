@@ -7,12 +7,20 @@ type nonrec connection = connection
 
 let page ~conn ~viewer_id ~filters ~followed_by pagination =
   let%bind rows =
-    Article_queries.page ~filters ~followed_by ~page:pagination |> fetch ~conn
+    run
+      ~conn
+      Article_queries.Page.statement
+      { Article_queries.Page.Input.filters; followed_by; page = pagination }
   in
   match rows with
   | Error _ as error -> Lwt.return error
   | Ok rows ->
-    let%bind count = Article_queries.count ~filters ~followed_by |> fetch_one ~conn in
+    let%bind count =
+      run
+        ~conn
+        Article_queries.Count.statement
+        { Article_queries.Count.Input.filters; followed_by }
+    in
     (match count with
      | Error _ as error -> Lwt.return error
      | Ok count ->
@@ -35,7 +43,7 @@ let feed ~conn ~viewer_id ~page:pagination =
 ;;
 
 let find ~conn ~viewer_id ~slug = read_article ~conn ~viewer_id slug
-let ensure_tag ~conn name = Article_queries.upsert_tag name |> fetch_one ~conn
+let ensure_tag ~conn name = run ~conn Article_queries.Upsert_tag.statement name
 
 let rec sync_tags ~conn ~article_id names index =
   match names with
@@ -45,10 +53,10 @@ let rec sync_tags ~conn ~article_id names index =
     (match tag with
      | Error _ as error -> Lwt.return error
      | Ok tag ->
-       let command =
-         Article_queries.attach_tag ~article_id ~tag_id:tag.id ~position:index
+       let input : Article_queries.Attach_tag.Input.t =
+         { article_id; tag_id = tag.id; position = index }
        in
-       let%bind inserted = execute_unit ~conn command in
+       let%bind inserted = run_unit ~conn Article_queries.Attach_tag.statement input in
        (match inserted with
         | Error _ as error -> Lwt.return error
         | Ok () -> sync_tags ~conn ~article_id rest (index + 1)))
@@ -63,8 +71,16 @@ let normalize_tags tags =
 ;;
 
 let create ~conn ~author_id ~slug ~now (article : Domain.Article.create) =
-  let insert = Article_queries.insert ~author_id ~slug ~now article in
-  let%bind inserted = fetch_one ~conn insert in
+  let input : Article_queries.Create_article.Input.t =
+    { author_id
+    ; slug
+    ; title = article.title
+    ; description = article.description
+    ; body = article.body
+    ; now
+    }
+  in
+  let%bind inserted = run ~conn Article_queries.Create_article.statement input in
   match inserted with
   | Error error
     when String.is_substring (Persistence_error.to_string error) ~substring:"constraint"
@@ -96,22 +112,24 @@ let update ~conn ~author_id ~slug ~new_slug ~now (changes : Domain.Article.updat
   | Error error -> Lwt.return (Error (`Persistence error))
   | Ok None -> Lwt.return (Error `Not_found)
   | Ok (Some _) ->
-    let%bind raw = Article_queries.by_slug slug |> fetch_one ~conn in
+    let%bind raw = run ~conn Article_queries.By_slug.statement slug in
     (match raw with
      | Error error -> Lwt.return (Error (`Persistence error))
-     | Ok raw when not (Int64.equal raw.author_id (Domain.User.Id.to_int64 author_id)) ->
+     | Ok None -> Lwt.return (Error `Not_found)
+     | Ok (Some raw)
+       when not (Int64.equal raw.author_id (Domain.User.Id.to_int64 author_id)) ->
        Lwt.return (Error `Forbidden)
-     | Ok raw ->
+     | Ok (Some raw) ->
        let title = Option.value changes.title ~default:raw.title in
        let description = Option.value changes.description ~default:raw.description in
        let body = Option.value changes.body ~default:raw.body in
        let slug' =
          Option.value new_slug ~default:(Domain.Article.Slug.of_string_exn raw.slug)
        in
-       let update =
-         Article_queries.update ~id:raw.id ~slug:slug' ~title ~description ~body ~now
+       let input : Article_queries.Update_article.Input.t =
+         { id = raw.id; slug = slug'; title; description; body; now }
        in
-       let%bind changed = execute_unit ~conn update in
+       let%bind changed = run_unit ~conn Article_queries.Update_article.statement input in
        (match changed with
         | Error error -> Lwt.return (Error (`Persistence error))
         | Ok () ->
@@ -119,8 +137,9 @@ let update ~conn ~author_id ~slug ~new_slug ~now (changes : Domain.Article.updat
             match changes.tag_list with
             | None -> Lwt.return (Ok ())
             | Some names ->
-              let delete = Article_queries.clear_tags raw.id in
-              let%bind removed = execute_unit ~conn delete in
+              let%bind removed =
+                run_unit ~conn Article_queries.Clear_tags.statement raw.id
+              in
               (match removed with
                | Error _ as error -> Lwt.return error
                | Ok () -> sync_tags ~conn ~article_id:raw.id (normalize_tags names) 0)
@@ -138,33 +157,32 @@ let update ~conn ~author_id ~slug ~new_slug ~now (changes : Domain.Article.updat
 ;;
 
 let delete ~conn ~author_id ~slug =
-  let%bind raw = Article_queries.by_slug slug |> fetch_opt ~conn in
+  let%bind raw = run ~conn Article_queries.By_slug.statement slug in
   match raw with
   | Error error -> Lwt.return (Error (`Persistence error))
   | Ok None -> Lwt.return (Error `Not_found)
   | Ok (Some raw) when not (Int64.equal raw.author_id (Domain.User.Id.to_int64 author_id))
     -> Lwt.return (Error `Forbidden)
   | Ok (Some raw) ->
-    let command = Article_queries.delete raw.id in
-    let%map deleted = execute_unit ~conn command in
+    let%map deleted = run_unit ~conn Article_queries.Delete_article.statement raw.id in
     (match deleted with
      | Ok () -> Ok ()
      | Error error -> Error (`Persistence error))
 ;;
 
 let alter_favorite ~conn ~add ~user_id ~slug =
-  let%bind raw = Article_queries.by_slug slug |> fetch_opt ~conn in
+  let%bind raw = run ~conn Article_queries.By_slug.statement slug in
   match raw with
   | Error error -> Lwt.return (Error (`Persistence error))
   | Ok None -> Lwt.return (Error `Not_found)
   | Ok (Some raw) ->
-    let command =
+    let input : Article_queries.Add_favorite.Input.t = { user_id; article_id = raw.id } in
+    let%bind changed =
       if add then
-        Article_queries.add_favorite ~user_id ~article_id:raw.id
+        run_unit ~conn Article_queries.Add_favorite.statement input
       else
-        Article_queries.remove_favorite ~user_id ~article_id:raw.id
+        run_unit ~conn Article_queries.Remove_favorite.statement input
     in
-    let%bind changed = execute_unit ~conn command in
     (match changed with
      | Error error -> Lwt.return (Error (`Persistence error))
      | Ok () ->

@@ -33,4 +33,4 @@
   typed-sql-caqti-lwt
   uri)
  (preprocess
-  (pps ppx_let)))
+  (pps ppx_fields_conv ppx_let)))

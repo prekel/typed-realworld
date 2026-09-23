@@ -36,8 +36,9 @@
   (opium (= 0.18.0))
   (typed-endpoint (= 0.1.0))
   (typed-endpoint-opium (= 0.1.0))
-  (typed-sql (= 0.1.1))
-  (typed-sql-caqti-lwt (= 0.1.1))
+  (typed-sql (= 0.2.0))
+  (typed-sql-caqti-lwt (= 0.2.0))
+  ppx_fields_conv
   (ppx_let (>= v0.17.1))
   (ppx_deriving_yojson :build)
   (ppx_deriving_jsonschema (>= 0.0.8))

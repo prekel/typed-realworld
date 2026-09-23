@@ -11,9 +11,9 @@ wire-contract проверяется закреплённым официальн
 ## Быстрый старт
 
 Нужны opam, SQLite development headers и чистые worktree
-`../typed-endpoint-v0.1.0` и `../typed-sql-v0.1.1`. Их можно создать
+`../typed-endpoint-v0.1.0` и `../typed-sql-v0.2.0`. Их можно создать
 командами `git -C ../typed-endpoint worktree add --detach ../typed-endpoint-v0.1.0 v0.1.0`
-и `git -C ../typed-sql worktree add --detach ../typed-sql-v0.1.1 v0.1.1`.
+и `git -C ../typed-sql worktree add --detach ../typed-sql-v0.2.0 v0.2.0`.
 
 ```sh
 make create_switch
@@ -70,9 +70,12 @@ revision указан в `UPSTREAM`. Дополнительные regression-с�
 - `src/domain` — значения и инварианты.
 - `src/application/*_service.ml` — use cases и transaction boundaries;
   `*_repository.mli` — порты persistence.
-- `src/infrastructure/sqlite/*_queries.ml` — декларации `typed-sql` для
-  SELECT/INSERT/UPDATE/DELETE; `*_repository_sqlite.ml` — SQLite-адаптеры
-  application-портов; `database_sqlite_lwt.ml` — pool и транзакции.
+- `src/infrastructure/sqlite/*_queries.ml` — operation-модули `typed-sql` с
+  вложенным `Input.t` и заранее скомпилированным `Statement.Portable` для
+  SELECT/INSERT/UPDATE/DELETE. `Statement.Dynamic` используется только для
+  batch-запросов с переменным числом значений `IN`; `*_repository_sqlite.ml` —
+  SQLite-адаптеры application-портов; `database_sqlite_lwt.ml` — pool и
+  транзакции.
 - `src/infrastructure/security` — scrypt и JWT HS256.
 - `src/http/*_controller.ml` — typed-endpoint DSL, DTO и auth context;
   `app.ml` только компилирует группы endpoint.
