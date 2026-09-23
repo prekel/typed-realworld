@@ -20,6 +20,7 @@
   user_queries
   user_repository_sqlite)
  (private_modules repository_support)
+ (inline_tests)
  (libraries
   base
   caqti
@@ -33,4 +34,4 @@
   typed-sql-caqti-lwt
   uri)
  (preprocess
-  (pps ppx_fields_conv ppx_let)))
+  (pps ppx_expect ppx_fields_conv ppx_let)))

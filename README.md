@@ -11,9 +11,9 @@ wire-contract проверяется закреплённым официальн
 ## Быстрый старт
 
 Нужны opam, SQLite development headers и чистые worktree
-`../typed-endpoint-v0.1.0` и `../typed-sql-v0.2.0`. Их можно создать
+`../typed-endpoint-v0.1.0` и `../typed-sql-v0.3.0`. Их можно создать
 командами `git -C ../typed-endpoint worktree add --detach ../typed-endpoint-v0.1.0 v0.1.0`
-и `git -C ../typed-sql worktree add --detach ../typed-sql-v0.2.0 v0.2.0`.
+и `git -C ../typed-sql worktree add --detach ../typed-sql-v0.3.0 v0.3.0`.
 
 ```sh
 make create_switch
@@ -75,7 +75,9 @@ revision указан в `UPSTREAM`. Дополнительные regression-с�
   SELECT/INSERT/UPDATE/DELETE. `Statement.Dynamic` используется только для
   batch-запросов с переменным числом значений `IN`; `*_repository_sqlite.ml` —
   SQLite-адаптеры application-портов; `database_sqlite_lwt.ml` — pool и
-  транзакции.
+  транзакции. Lookup statements используют `LIMIT 1` и статическую
+  cardinality-модель, а `RETURNING` с business invariant явно проверяется
+  через `expect_one`.
 - `src/infrastructure/security` — scrypt и JWT HS256.
 - `src/http/*_controller.ml` — typed-endpoint DSL, DTO и auth context;
   `app.ml` только компилирует группы endpoint.

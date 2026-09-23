@@ -72,12 +72,24 @@
 - Публичные контракты и odoc-комментарии размещай в `.mli`.
 - SELECT записывай `Query.(from ... |> ... |> select ...)`; `select` ставь
   последним. DML оформляй аналогично через локальное открытие builder.
-- Переиспользуемый запрос оформляй operation-модулем с вложенным `Input.t` и
-  статическим значением `statement`, созданным через `Statement.Portable` при
-  инициализации модуля. Выполняй statements единым `Typed_sql_caqti_lwt.run`.
+- Каждый statement объявляй корневым `snake_case` значением query-модуля и
+  создавай через `Statement.Portable` при инициализации модуля. Отдельный
+  модуль создавай только для нового record-типа input с несколькими полями:
+  он содержит `type t` и getter'ы, а statement остаётся рядом в корневом
+  модуле. Для scalar input используй доменный или primitive тип напрямую; для
+  отсутствующего input задай `unit` в типе statement, без аннотации параметра
+  callback. Выполняй statements единым `Typed_sql_caqti_lwt.run`.
 - `Statement.Dynamic` используй только когда runtime input меняет неограниченную
   форму SQL, например число элементов `IN`. Optional scalar filters выражай
   nullable parameters, а небольшой конечный набор форм — `Statement.choose`.
+- `query_one` и `query_one_exn` используй только когда `Cardinality.exactly_one`
+  доказана DSL через `Query.select_exactly_one`. `Query.limit_one` доказывает
+  только ноль или одну строку и требует `query_optional`. PK, `UNIQUE` и
+  бизнес-инварианты не являются статическим proof; для них, а также DML
+  `RETURNING`, явно выбирай `expect_one` или `expect_optional`.
+- В expect-тесте рендери статический statement без `~input`, если проверяется
+  только SQL shape. Input передавай только dynamic statement или когда нужно
+  проверить binding/валидацию getter'ов.
 - Для insert-or-return существующей строки используй target-specific
   `Insert.on_conflict ... |> do_update ... |> returning`. Для идемпотентного
   добавления связи без чтения строки оставляй `on_conflict_do_nothing`.
@@ -90,6 +102,9 @@
   изменение persistence semantics — SQLite integration test.
 - В expect-тестах ставь отдельный `[%expect {| ... |}]` непосредственно после
   каждого `print`/`printf`; не объединяй вывод нескольких печатей в один снимок.
+- Каждый statement сопровождай inline expect-тестом сразу после его объявления:
+  он печатает скомпилированный SQLite SQL. Для dynamic statement передавай
+  минимальный input, задающий SQL shape.
 - Markdown пиши на русском, текст в коде и публичных HTTP errors — на английском.
 - Не добавляй CI. Не выполняй `git commit`, `git add`, `git init`, push или
   другие изменяющие состояние git-команды, если пользователь явно не попросил

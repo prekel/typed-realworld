@@ -14,253 +14,224 @@ module Adapter = Typed_sql_caqti_lwt
 module Domain = Realworld_domain.Domain
 
 module Insert_user = struct
-  module Input = struct
-    type t =
-      { id : int64
-      ; email : string
-      ; username : string
-      }
-  end
-
-  let statement =
-    Statement.Portable.command_exn (fun params ->
-      let id = params.column Users.id_column ~get:(fun input -> input.Input.id) in
-      let email =
-        params.column Users.email_column ~get:(fun input -> input.Input.email)
-      in
-      let username =
-        params.column Users.username_column ~get:(fun input -> input.Input.username)
-      in
-      Insert.(
-        into Users.table
-        |> set_expr Users.id_column id
-        |> set_expr Users.email_column email
-        |> set_expr Users.username_column username
-        |> set Users.password_hash_column "test-hash"
-        |> set Users.bio_column None
-        |> set Users.image_column None
-        |> command))
-  ;;
+  type t =
+    { id : int64
+    ; email : string
+    ; username : string
+    }
 end
+
+let insert_user =
+  Statement.Portable.command_exn (fun params ->
+    let id = params.column Users.id_column ~get:(fun input -> input.Insert_user.id) in
+    let email =
+      params.column Users.email_column ~get:(fun input -> input.Insert_user.email)
+    in
+    let username =
+      params.column Users.username_column ~get:(fun input -> input.Insert_user.username)
+    in
+    Insert.(
+      into Users.table
+      |> set_expr Users.id_column id
+      |> set_expr Users.email_column email
+      |> set_expr Users.username_column username
+      |> set Users.password_hash_column "test-hash"
+      |> set Users.bio_column None
+      |> set Users.image_column None
+      |> command))
+;;
 
 module Insert_article = struct
-  module Input = struct
-    type t =
-      { id : int64
-      ; slug : string
-      ; author_id : int64
-      ; now : Ptime.t
-      }
-  end
-
-  let statement =
-    Statement.Portable.command_exn (fun params ->
-      let id = params.column Articles.id_column ~get:(fun input -> input.Input.id) in
-      let slug =
-        params.column Articles.slug_column ~get:(fun input -> input.Input.slug)
-      in
-      let author_id =
-        params.column Articles.author_id_column ~get:(fun input -> input.Input.author_id)
-      in
-      let now =
-        params.column Articles.created_at_column ~get:(fun input -> input.Input.now)
-      in
-      Insert.(
-        into Articles.table
-        |> set_expr Articles.id_column id
-        |> set_expr Articles.author_id_column author_id
-        |> set_expr Articles.slug_column slug
-        |> set Articles.title_column "Generated schema"
-        |> set Articles.description_column "A typed SQL integration test"
-        |> set Articles.body_column "Content survives schema upgrades."
-        |> set_expr Articles.created_at_column now
-        |> set_expr Articles.updated_at_column now
-        |> command))
-  ;;
+  type t =
+    { id : int64
+    ; slug : string
+    ; author_id : int64
+    ; now : Ptime.t
+    }
 end
 
-module Article_by_id = struct
-  module Input = struct
-    type t = int64
-  end
+let insert_article =
+  Statement.Portable.command_exn (fun params ->
+    let id =
+      params.column Articles.id_column ~get:(fun input -> input.Insert_article.id)
+    in
+    let slug =
+      params.column Articles.slug_column ~get:(fun input -> input.Insert_article.slug)
+    in
+    let author_id =
+      params.column Articles.author_id_column ~get:(fun input ->
+        input.Insert_article.author_id)
+    in
+    let now =
+      params.column Articles.created_at_column ~get:(fun input ->
+        input.Insert_article.now)
+    in
+    Insert.(
+      into Articles.table
+      |> set_expr Articles.id_column id
+      |> set_expr Articles.author_id_column author_id
+      |> set_expr Articles.slug_column slug
+      |> set Articles.title_column "Generated schema"
+      |> set Articles.description_column "A typed SQL integration test"
+      |> set Articles.body_column "Content survives schema upgrades."
+      |> set_expr Articles.created_at_column now
+      |> set_expr Articles.updated_at_column now
+      |> command))
+;;
 
-  let statement =
-    Statement.Portable.query_one_exn (fun params ->
-      let id = params.column Articles.id_column ~get:Fn.id in
-      Query.(
-        from Articles.table
-        |> where (fun row -> Articles.id row =. id)
-        |> select Articles.projection))
-  ;;
-end
+let article_by_id =
+  Statement.Portable.expect_one_exn (fun params ->
+    let id = params.column Articles.id_column ~get:Fn.id in
+    Query.(
+      from Articles.table
+      |> where (fun row -> Articles.id row =. id)
+      |> limit_one
+      |> select Articles.projection))
+;;
 
 module Add_favorite = struct
-  module Input = struct
-    type t =
-      { user_id : int64
-      ; article_id : int64
-      }
-  end
-
-  let statement =
-    Statement.Portable.command_exn (fun params ->
-      let user_id =
-        params.column Favorites.user_id_column ~get:(fun input -> input.Input.user_id)
-      in
-      let article_id =
-        params.column Favorites.article_id_column ~get:(fun input ->
-          input.Input.article_id)
-      in
-      Insert.(
-        into Favorites.table
-        |> set_expr Favorites.user_id_column user_id
-        |> set_expr Favorites.article_id_column article_id
-        |> on_conflict_do_nothing
-        |> command))
-  ;;
+  type t =
+    { user_id : int64
+    ; article_id : int64
+    }
 end
+
+let add_favorite =
+  Statement.Portable.command_exn (fun params ->
+    let user_id =
+      params.column Favorites.user_id_column ~get:(fun input ->
+        input.Add_favorite.user_id)
+    in
+    let article_id =
+      params.column Favorites.article_id_column ~get:(fun input ->
+        input.Add_favorite.article_id)
+    in
+    Insert.(
+      into Favorites.table
+      |> set_expr Favorites.user_id_column user_id
+      |> set_expr Favorites.article_id_column article_id
+      |> on_conflict_do_nothing
+      |> command))
+;;
 
 module Follow = struct
-  module Input = struct
-    type t =
-      { follower_id : int64
-      ; followed_id : int64
-      }
-  end
-
-  let statement =
-    Statement.Portable.command_exn (fun params ->
-      let follower_id =
-        params.column Follows.follower_id_column ~get:(fun input ->
-          input.Input.follower_id)
-      in
-      let followed_id =
-        params.column Follows.followed_id_column ~get:(fun input ->
-          input.Input.followed_id)
-      in
-      Insert.(
-        into Follows.table
-        |> set_expr Follows.follower_id_column follower_id
-        |> set_expr Follows.followed_id_column followed_id
-        |> command))
-  ;;
+  type t =
+    { follower_id : int64
+    ; followed_id : int64
+    }
 end
+
+let follow =
+  Statement.Portable.command_exn (fun params ->
+    let follower_id =
+      params.column Follows.follower_id_column ~get:(fun input ->
+        input.Follow.follower_id)
+    in
+    let followed_id =
+      params.column Follows.followed_id_column ~get:(fun input ->
+        input.Follow.followed_id)
+    in
+    Insert.(
+      into Follows.table
+      |> set_expr Follows.follower_id_column follower_id
+      |> set_expr Follows.followed_id_column followed_id
+      |> command))
+;;
 
 module Insert_article_tag = struct
-  module Input = struct
-    type t =
-      { article_id : int64
-      ; tag_id : int64
-      }
-  end
-
-  let statement =
-    Statement.Portable.command_exn (fun params ->
-      let article_id =
-        params.column Article_tags.article_id_column ~get:(fun input ->
-          input.Input.article_id)
-      in
-      let tag_id =
-        params.column Article_tags.tag_id_column ~get:(fun input -> input.Input.tag_id)
-      in
-      Insert.(
-        into Article_tags.table
-        |> set_expr Article_tags.article_id_column article_id
-        |> set_expr Article_tags.tag_id_column tag_id
-        |> set Article_tags.position_column 0L
-        |> command))
-  ;;
+  type t =
+    { article_id : int64
+    ; tag_id : int64
+    }
 end
+
+let insert_article_tag =
+  Statement.Portable.command_exn (fun params ->
+    let article_id =
+      params.column Article_tags.article_id_column ~get:(fun input ->
+        input.Insert_article_tag.article_id)
+    in
+    let tag_id =
+      params.column Article_tags.tag_id_column ~get:(fun input ->
+        input.Insert_article_tag.tag_id)
+    in
+    Insert.(
+      into Article_tags.table
+      |> set_expr Article_tags.article_id_column article_id
+      |> set_expr Article_tags.tag_id_column tag_id
+      |> set Article_tags.position_column 0L
+      |> command))
+;;
 
 module Insert_comment = struct
-  module Input = struct
-    type t =
-      { article_id : int64
-      ; body : string
-      ; now : Ptime.t
-      }
-  end
-
-  let statement =
-    Statement.Portable.command_exn (fun params ->
-      let article_id =
-        params.column Comments.article_id_column ~get:(fun input ->
-          input.Input.article_id)
-      in
-      let body =
-        params.column Comments.body_column ~get:(fun input -> input.Input.body)
-      in
-      let now =
-        params.column Comments.created_at_column ~get:(fun input -> input.Input.now)
-      in
-      Insert.(
-        into Comments.table
-        |> set_expr Comments.article_id_column article_id
-        |> set Comments.author_id_column 2L
-        |> set_expr Comments.body_column body
-        |> set_expr Comments.created_at_column now
-        |> set_expr Comments.updated_at_column now
-        |> command))
-  ;;
+  type t =
+    { article_id : int64
+    ; body : string
+    ; now : Ptime.t
+    }
 end
 
-module Joined_article_author = struct
-  module Input = struct
-    type t = int64
-  end
+let insert_comment =
+  Statement.Portable.command_exn (fun params ->
+    let article_id =
+      params.column Comments.article_id_column ~get:(fun input ->
+        input.Insert_comment.article_id)
+    in
+    let body =
+      params.column Comments.body_column ~get:(fun input -> input.Insert_comment.body)
+    in
+    let now =
+      params.column Comments.created_at_column ~get:(fun input ->
+        input.Insert_comment.now)
+    in
+    Insert.(
+      into Comments.table
+      |> set_expr Comments.article_id_column article_id
+      |> set Comments.author_id_column 2L
+      |> set_expr Comments.body_column body
+      |> set_expr Comments.created_at_column now
+      |> set_expr Comments.updated_at_column now
+      |> command))
+;;
 
-  let statement =
-    Statement.Portable.query_one_exn (fun params ->
-      let id = params.column Articles.id_column ~get:Fn.id in
-      Query.(
-        from Articles.table
-        |> inner_join Users.table ~on:(fun article user ->
-          Articles.author_id article =. Users.id user)
-        |> where (fun (article, _) -> Articles.id article =. id)
-        |> select (fun (article, user) ->
-          Projection.pair (Articles.title article) (Users.username user))))
-  ;;
-end
+let joined_article_author =
+  Statement.Portable.expect_one_exn (fun params ->
+    let id = params.column Articles.id_column ~get:Fn.id in
+    Query.(
+      from Articles.table
+      |> inner_join Users.table ~on:(fun article user ->
+        Articles.author_id article =. Users.id user)
+      |> where (fun (article, _) -> Articles.id article =. id)
+      |> limit_one
+      |> select (fun (article, user) ->
+        Projection.pair (Articles.title article) (Users.username user))))
+;;
 
-module Delete_article = struct
-  module Input = struct
-    type t = int64
-  end
+let delete_article =
+  Statement.Portable.command_exn (fun params ->
+    let id = params.column Articles.id_column ~get:Fn.id in
+    Delete.(from Articles.table |> where (fun row -> Articles.id row =. id) |> command))
+;;
 
-  let statement =
-    Statement.Portable.command_exn (fun params ->
-      let id = params.column Articles.id_column ~get:Fn.id in
-      Delete.(from Articles.table |> where (fun row -> Articles.id row =. id) |> command))
-  ;;
-end
+let all_favorites : (unit, Favorites.t list, Dialect.portable) Statement.t =
+  Statement.Portable.query_many_exn (fun _ ->
+    Query.(from Favorites.table |> select Favorites.projection))
+;;
 
-module All_favorites = struct
-  let statement =
-    Statement.Portable.query_many_exn (fun (_ : (unit, _) Statement.parameters) ->
-      Query.(from Favorites.table |> select Favorites.projection))
-  ;;
-end
+let all_comments : (unit, Comments.t list, Dialect.portable) Statement.t =
+  Statement.Portable.query_many_exn (fun _ ->
+    Query.(from Comments.table |> select Comments.projection))
+;;
 
-module All_comments = struct
-  let statement =
-    Statement.Portable.query_many_exn (fun (_ : (unit, _) Statement.parameters) ->
-      Query.(from Comments.table |> select Comments.projection))
-  ;;
-end
+let all_article_tags : (unit, Article_tags.t list, Dialect.portable) Statement.t =
+  Statement.Portable.query_many_exn (fun _ ->
+    Query.(from Article_tags.table |> select Article_tags.projection))
+;;
 
-module All_article_tags = struct
-  let statement =
-    Statement.Portable.query_many_exn (fun (_ : (unit, _) Statement.parameters) ->
-      Query.(from Article_tags.table |> select Article_tags.projection))
-  ;;
-end
-
-module All_tags = struct
-  let statement =
-    Statement.Portable.query_many_exn (fun (_ : (unit, _) Statement.parameters) ->
-      Query.(from Tags.table |> select Tags.projection))
-  ;;
-end
+let all_tags : (unit, Tags.t list, Dialect.portable) Statement.t =
+  Statement.Portable.query_many_exn (fun _ ->
+    Query.(from Tags.table |> select Tags.projection))
+;;
 
 let or_fail result =
   result |> Result.map_error ~f:Adapter.error_to_string |> Result.ok_or_failwith
@@ -272,15 +243,10 @@ let execute ~conn statement input =
 ;;
 
 let email = "before'upgrade@example.test"
-
-let seed conn =
-  execute ~conn Insert_user.statement { id = 1L; email; username = "before-upgrade" }
-;;
+let seed conn = execute ~conn insert_user { id = 1L; email; username = "before-upgrade" }
 
 let check_user conn =
-  let%bind result =
-    Adapter.run ~conn Realworld_sqlite.User_queries.By_email.statement email
-  in
+  let%bind result = Adapter.run ~conn Realworld_sqlite.User_queries.by_email email in
   let user = or_fail result |> Option.value_exn in
   assert (Domain.User.Id.equal user.id (Domain.User.Id.of_int64_exn 1L));
   assert (String.equal (Domain.User.Username.to_string user.username) "before-upgrade");
@@ -288,9 +254,7 @@ let check_user conn =
   assert (Option.is_none user.bio);
   assert (Option.is_none user.image);
   let missing_id = Domain.User.Id.of_int64_exn 999L in
-  let%map missing =
-    Adapter.run ~conn Realworld_sqlite.User_queries.By_id.statement missing_id
-  in
+  let%map missing = Adapter.run ~conn Realworld_sqlite.User_queries.by_id missing_id in
   assert (Option.is_none (or_fail missing))
 ;;
 
@@ -306,20 +270,20 @@ let expect_constraint kind = function
 let verify conn =
   let%bind () = check_user conn in
   let%bind duplicate =
-    Adapter.run ~conn Insert_user.statement { id = 10L; email; username = "another-name" }
+    Adapter.run ~conn insert_user { id = 10L; email; username = "another-name" }
   in
   expect_constraint `Unique duplicate;
   let%bind case_duplicate =
     Adapter.run
       ~conn
-      Insert_user.statement
+      insert_user
       { id = 11L; email = "BEFORE'UPGRADE@EXAMPLE.TEST"; username = "case-duplicate" }
   in
   expect_constraint `Unique case_duplicate;
   let%bind () =
     execute
       ~conn
-      Insert_user.statement
+      insert_user
       { id = 2L; email = "reader@example.test"; username = "reader" }
   in
   let now =
@@ -329,73 +293,67 @@ let verify conn =
   let%bind invalid_author =
     Adapter.run
       ~conn
-      Insert_article.statement
+      insert_article
       { id = 1L; slug = "generated-schema"; author_id = 999L; now }
   in
   expect_constraint `Foreign_key invalid_author;
   let%bind () =
     execute
       ~conn
-      Insert_article.statement
+      insert_article
       { id = 1L; slug = "generated-schema"; author_id = 1L; now }
   in
   let%bind () =
-    execute
-      ~conn
-      Insert_article.statement
-      { id = 2L; slug = "other-article"; author_id = 2L; now }
+    execute ~conn insert_article { id = 2L; slug = "other-article"; author_id = 2L; now }
   in
-  let%bind selected = Adapter.run ~conn Article_by_id.statement 1L in
+  let%bind selected = Adapter.run ~conn article_by_id 1L in
   let stored = or_fail selected in
   assert (Ptime.equal stored.created_at now);
   assert (String.equal stored.body "Content survives schema upgrades.");
-  let favorite : Add_favorite.Input.t = { user_id = 2L; article_id = 1L } in
-  let%bind () = execute ~conn Add_favorite.statement favorite in
-  let%bind () = execute ~conn Add_favorite.statement favorite in
-  let%bind favorites = Adapter.run ~conn All_favorites.statement () in
+  let favorite : Add_favorite.t = { user_id = 2L; article_id = 1L } in
+  let%bind () = execute ~conn add_favorite favorite in
+  let%bind () = execute ~conn add_favorite favorite in
+  let%bind favorites = Adapter.run ~conn all_favorites () in
   assert (Int.equal (List.length (or_fail favorites)) 1);
   let%bind self_follow =
-    Adapter.run ~conn Follow.statement { follower_id = 2L; followed_id = 2L }
+    Adapter.run ~conn follow { follower_id = 2L; followed_id = 2L }
   in
   expect_constraint `Check self_follow;
-  let%bind () = execute ~conn Follow.statement { follower_id = 2L; followed_id = 1L } in
+  let%bind () = execute ~conn follow { follower_id = 2L; followed_id = 1L } in
   let tag = Domain.Article.Tag.of_string_exn "ocaml" in
   let%bind inserted_tag =
-    Adapter.run ~conn Realworld_sqlite.Article_queries.Upsert_tag.statement tag
+    Adapter.run ~conn Realworld_sqlite.Article_queries.upsert_tag tag
   in
   let inserted_tag = or_fail inserted_tag in
   let%bind existing_tag =
-    Adapter.run ~conn Realworld_sqlite.Article_queries.Upsert_tag.statement tag
+    Adapter.run ~conn Realworld_sqlite.Article_queries.upsert_tag tag
   in
   let existing_tag = or_fail existing_tag in
   assert (Int64.equal inserted_tag.id existing_tag.id);
-  let%bind stored_tags = Adapter.run ~conn All_tags.statement () in
+  let%bind stored_tags = Adapter.run ~conn all_tags () in
   assert (Int.equal (List.length (or_fail stored_tags)) 1);
   let%bind () =
-    execute
-      ~conn
-      Insert_article_tag.statement
-      { article_id = 1L; tag_id = inserted_tag.id }
+    execute ~conn insert_article_tag { article_id = 1L; tag_id = inserted_tag.id }
   in
   let%bind () =
-    execute ~conn Insert_comment.statement { article_id = 1L; body = "A comment"; now }
+    execute ~conn insert_comment { article_id = 1L; body = "A comment"; now }
   in
   let%bind () =
     execute
       ~conn
-      Insert_comment.statement
+      insert_comment
       { article_id = 2L; body = "A comment on another article"; now }
   in
   let%bind article_comments =
-    Adapter.run ~conn Realworld_sqlite.Comment_queries.By_article.statement 1L
+    Adapter.run ~conn Realworld_sqlite.Comment_queries.by_article 1L
   in
   let article_comments = or_fail article_comments in
   assert (Int.equal (List.length article_comments) 1);
   assert (String.equal (List.hd_exn article_comments).body "A comment");
   (* Check dialect-neutral query construction now; PostgreSQL execution is a later step. *)
   List.iter [ Dialect.Sqlite; Dialect.Postgresql ] ~f:(fun dialect ->
-    Statement.sql_exn ~dialect ~input:1L Joined_article_author.statement |> ignore);
-  let%bind joined_result = Adapter.run ~conn Joined_article_author.statement 1L in
+    Statement.sql_exn ~dialect ~input:1L joined_article_author |> ignore);
+  let%bind joined_result = Adapter.run ~conn joined_article_author 1L in
   let title, username = or_fail joined_result in
   assert (String.equal title "Generated schema");
   assert (String.equal username "before-upgrade");
@@ -414,36 +372,36 @@ let verify conn =
   let%bind filtered =
     Adapter.run
       ~conn
-      Realworld_sqlite.Article_queries.Page.statement
+      Realworld_sqlite.Article_queries.page
       { filters; followed_by = None; page }
   in
   assert (Int.equal (List.length (or_fail filtered)) 1);
   let%bind filtered_count =
     Adapter.run
       ~conn
-      Realworld_sqlite.Article_queries.Count.statement
+      Realworld_sqlite.Article_queries.count
       { filters; followed_by = None }
   in
   assert (Int64.equal (or_fail filtered_count) 1L);
   let%bind feed =
     Adapter.run
       ~conn
-      Realworld_sqlite.Article_queries.Page.statement
+      Realworld_sqlite.Article_queries.page
       { filters = Domain.Article.no_filters
       ; followed_by = Some (Domain.User.Id.of_int64_exn 2L)
       ; page
       }
   in
   assert (Int.equal (List.length (or_fail feed)) 1);
-  let%bind () = execute ~conn Delete_article.statement 1L in
-  let%bind () = execute ~conn Delete_article.statement 2L in
-  let%bind comments = Adapter.run ~conn All_comments.statement () in
-  let%bind favorites = Adapter.run ~conn All_favorites.statement () in
-  let%bind article_tags = Adapter.run ~conn All_article_tags.statement () in
+  let%bind () = execute ~conn delete_article 1L in
+  let%bind () = execute ~conn delete_article 2L in
+  let%bind comments = Adapter.run ~conn all_comments () in
+  let%bind favorites = Adapter.run ~conn all_favorites () in
+  let%bind article_tags = Adapter.run ~conn all_article_tags () in
   assert (List.is_empty (or_fail comments));
   assert (List.is_empty (or_fail favorites));
   assert (List.is_empty (or_fail article_tags));
-  let%map tags = Adapter.run ~conn All_tags.statement () in
+  let%map tags = Adapter.run ~conn all_tags () in
   assert (Int.equal (List.length (or_fail tags)) 1)
 ;;
 

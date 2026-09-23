@@ -8,14 +8,6 @@
  (modules domain_test)
  (libraries base realworld_domain))
 
-(library
- (name queries_test)
- (modules queries_test)
- (libraries base ptime realworld_domain realworld_sqlite typed-sql)
- (inline_tests)
- (preprocess
-  (pps ppx_expect)))
-
 (executable
  (name schema_integration_test)
  (modules schema_integration_test)
