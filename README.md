@@ -4,6 +4,8 @@ Backend полной спецификации RealWorld/Conduit на OCaml 5.5. 
 `/api`, использует Opium и runtime adapter `typed-endpoint`; persistence
 реализован через Caqti/SQLite и generated descriptors `typed-sql`.
 
+Текущие направления развития описаны в [дорожной карте](doc/roadmap.md).
+
 Поддержаны регистрация и login, current user, profiles/follow, публикация,
 лента, фильтрация и pagination статей, теги, favorites и comments. Точный
 wire-contract проверяется закреплённым официальным набором Hurl.
@@ -11,9 +13,9 @@ wire-contract проверяется закреплённым официальн
 ## Быстрый старт
 
 Нужны opam, SQLite development headers и чистые worktree
-`../typed-endpoint-v0.1.0` и `../typed-sql-v0.3.0`. Их можно создать
+`../typed-endpoint-v0.1.0` и `../typed-sql-v0.3.1`. Их можно создать
 командами `git -C ../typed-endpoint worktree add --detach ../typed-endpoint-v0.1.0 v0.1.0`
-и `git -C ../typed-sql worktree add --detach ../typed-sql-v0.3.0 v0.3.0`.
+и `git -C ../typed-sql worktree add --detach ../typed-sql-v0.3.1 v0.3.1`.
 
 ```sh
 make create_switch

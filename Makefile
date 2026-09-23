@@ -2,9 +2,9 @@ all: build
 
 PACKAGES = ./typed-realworld.opam
 TYPED_ENDPOINT_VERSION = 0.1.0
-TYPED_SQL_VERSION = 0.3.0
+TYPED_SQL_VERSION = 0.3.1
 TYPED_ENDPOINT_DIR ?= ../typed-endpoint-v0.1.0
-TYPED_SQL_DIR ?= ../typed-sql-v0.3.0
+TYPED_SQL_DIR ?= ../typed-sql-v0.3.1
 export NAME
 export DBMATE_BIN ?= $(CURDIR)/.tools/bin/dbmate
 export HURL_BIN ?= $(CURDIR)/.tools/bin/hurl

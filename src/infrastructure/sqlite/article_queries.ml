@@ -12,39 +12,38 @@ module Follows = Schema.Follows
 let filtered ~author ~tag ~favorited_by ~followed_by =
   Query.(
     from Articles.table
-    |> where (fun article ->
-      Expr.is_null author
-      ||. (from Users.table
-           |> where (fun user ->
-             Users.id user
-             =. Articles.author_id article
-             &&. (Expr.to_nullable (Users.username user) =. author))
-           |> exists)
-      &&. (Expr.is_null tag
-           ||. (from Article_tags.table
-                |> inner_join Tags.table ~on:(fun article_tag tag_row ->
-                  Article_tags.tag_id article_tag =. Tags.id tag_row)
-                |> where (fun (article_tag, tag_row) ->
-                  Article_tags.article_id article_tag
-                  =. Articles.id article
-                  &&. (Expr.to_nullable (Tags.name tag_row) =. tag))
-                |> exists))
-      &&. (Expr.is_null favorited_by
-           ||. (from Favorites.table
-                |> inner_join Users.table ~on:(fun favorite user ->
-                  Favorites.user_id favorite =. Users.id user)
-                |> where (fun (favorite, user) ->
-                  Favorites.article_id favorite
-                  =. Articles.id article
-                  &&. (Expr.to_nullable (Users.username user) =. favorited_by))
-                |> exists))
-      &&. (Expr.is_null followed_by
-           ||. (from Follows.table
-                |> where (fun follow ->
-                  Expr.to_nullable (Follows.follower_id follow)
-                  =. followed_by
-                  &&. (Follows.followed_id follow =. Articles.author_id article))
-                |> exists))))
+    |> where_optional_param author ~f:(fun article author ->
+      from Users.table
+      |> where (fun user ->
+        Users.id user
+        =. Articles.author_id article
+        &&. (Expr.to_nullable (Users.username user) =. author))
+      |> exists)
+    |> where_optional_param tag ~f:(fun article tag ->
+      from Article_tags.table
+      |> inner_join Tags.table ~on:(fun article_tag tag_row ->
+        Article_tags.tag_id article_tag =. Tags.id tag_row)
+      |> where (fun (article_tag, tag_row) ->
+        Article_tags.article_id article_tag
+        =. Articles.id article
+        &&. (Expr.to_nullable (Tags.name tag_row) =. tag))
+      |> exists)
+    |> where_optional_param favorited_by ~f:(fun article favorited_by ->
+      from Favorites.table
+      |> inner_join Users.table ~on:(fun favorite user ->
+        Favorites.user_id favorite =. Users.id user)
+      |> where (fun (favorite, user) ->
+        Favorites.article_id favorite
+        =. Articles.id article
+        &&. (Expr.to_nullable (Users.username user) =. favorited_by))
+      |> exists)
+    |> where_optional_param followed_by ~f:(fun article followed_by ->
+      from Follows.table
+      |> where (fun follow ->
+        Expr.to_nullable (Follows.follower_id follow)
+        =. followed_by
+        &&. (Follows.followed_id follow =. Articles.author_id article))
+      |> exists))
 ;;
 
 module Page = struct
