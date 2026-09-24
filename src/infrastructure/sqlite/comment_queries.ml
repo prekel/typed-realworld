@@ -35,26 +35,6 @@ let%expect_test "article by slug SQL" =
     |}]
 ;;
 
-let all : (unit, Comments.t list, Dialect.portable) Statement.t =
-  Statement.Portable.query_many_exn (fun _ ->
-    Query.(from Comments.table |> select Comments.projection))
-;;
-
-let%expect_test "all comments SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite all);
-  [%expect
-    {|
-    SELECT
-      t0."id",
-      t0."article_id",
-      t0."author_id",
-      t0."body",
-      t0."created_at",
-      t0."updated_at"
-    FROM "comments" AS t0
-    |}]
-;;
-
 let by_article =
   Statement.Portable.query_many_exn (fun params ->
     let article_id = params.column Comments.article_id_column ~get:Fn.id in
@@ -188,10 +168,37 @@ let%expect_test "create comment SQL" =
     |}]
 ;;
 
+module Delete_comment = struct
+  type t =
+    { comment_id : Domain.Comment.Id.t
+    ; article_id : int64
+    ; author_id : Domain.User.Id.t
+    }
+  [@@deriving fields ~getters]
+
+  let comment_id_value input = Domain.Comment.Id.to_int64 input.comment_id
+  let author_id_value input = Domain.User.Id.to_int64 input.author_id
+end
+
 let delete_comment =
-  Statement.Portable.command_exn (fun params ->
-    let id = params.column Comments.id_column ~get:Domain.Comment.Id.to_int64 in
-    Delete.(from Comments.table |> where (fun row -> Comments.id row =. id) |> command))
+  Statement.Portable.expect_optional_exn (fun params ->
+    let comment_id =
+      params.column Comments.id_column ~get:Delete_comment.comment_id_value
+    in
+    let article_id =
+      params.column Comments.article_id_column ~get:Delete_comment.article_id
+    in
+    let author_id =
+      params.column Comments.author_id_column ~get:Delete_comment.author_id_value
+    in
+    Delete.(
+      from Comments.table
+      |> where (fun comment ->
+        Comments.id comment
+        =. comment_id
+        &&. (Comments.article_id comment =. article_id)
+        &&. (Comments.author_id comment =. author_id))
+      |> returning (fun comment -> Projection.expr (Comments.id comment))))
 ;;
 
 let%expect_test "delete comment SQL" =
@@ -200,6 +207,12 @@ let%expect_test "delete comment SQL" =
     {|
     DELETE FROM "comments"
     WHERE
-      ("id" = ?1)
+      (
+        ("id" = ?1)
+        AND ("article_id" = ?2)
+        AND ("author_id" = ?3)
+      )
+    RETURNING
+      "id"
     |}]
 ;;

@@ -9,7 +9,7 @@ transaction boundaries, SQLite repositories используют `typed-sql`, а
 изменяется только версионированными dbmate migrations.
 
 `make check` проверяет форматирование, сборку, unit и SQLite integration tests,
-162 Hurl requests, документацию, opam package и соответствие `db/schema.json`
+170 Hurl requests, документацию, opam package и соответствие `db/schema.json`
 миграциям.
 
 Следующие этапы не расширяют RealWorld wire contract. Они устраняют оставшиеся
@@ -44,11 +44,13 @@ aggregate. `Expr.coalesce`, `Query.select_one` и `Query.default_if_empty` дл�
 
 ## 1. Убрать полные сканы profiles и follows
 
-Сейчас получение одного профиля читает все строки `users` и `follows`.
-`follow` и `unfollow` после изменения связи снова читают всю таблицу follows,
+**Статус: выполнено.**
+
+Раньше получение одного профиля читало все строки `users` и `follows`.
+`follow` и `unfollow` после изменения связи снова читали всю таблицу follows,
 чтобы построить один response.
 
-Нужно:
+Реализовано:
 
 - добавить `profile_by_username`, выбирающий одного пользователя;
 - вычислять `following` через correlated `EXISTS` только для текущего viewer;
@@ -65,11 +67,12 @@ tests проверяют оба значения `following`.
 
 ## 2. Включить ownership в mutation SQL
 
-Проверка владельца и mutation уже выполняются в одной транзакции, но текущие
-`UPDATE`/`DELETE` ограничены только идентификатором сущности. Сам mutation
-должен повторно выражать authorization invariant в своём `WHERE`.
+**Статус: выполнено.**
 
-Нужно:
+Проверка владельца и mutation выполняются в одной транзакции. Mutation также
+повторяет authorization invariant в своём `WHERE`.
+
+Реализовано:
 
 - обновлять статью с `WHERE article.id = ? AND article.author_id = ?`;
 - удалять статью с тем же ownership scope;
@@ -86,12 +89,14 @@ tests проверяют оба значения `following`.
 
 ## 3. Сохранить структурированные persistence errors
 
-Сейчас `Repository_support.run` сразу превращает adapter error в строковый
-`Persistence_error`, а создание статьи распознаёт конфликт slug поиском слова
-`constraint`. Это смешивает unique, foreign-key и check violations и плохо
-ведёт себя при конкурентных запросах.
+**Статус: выполнено.**
 
-Нужно:
+Раньше `Repository_support.run` сразу превращал adapter error в строковый
+`Persistence_error`, а создание статьи распознавало конфликт slug поиском слова
+`constraint`. Это смешивало unique, foreign-key и check violations и плохо
+работало при конкурентных запросах.
+
+Реализовано:
 
 - классифицировать `Typed_sql_caqti_lwt.Constraint_violation` до преобразования
   в публичный `Persistence_error`;
@@ -111,12 +116,14 @@ constraint kind достаточно, а конкретный business conflict 
 
 ## 4. Сократить article read model
 
-Текущая страница статей после основного SELECT отдельно загружает авторов,
+**Статус: выполнено.**
+
+Раньше страница статей после основного SELECT отдельно загружала авторов,
 подписки, tags, article-tags и все favorite rows выбранных статей. Это не N+1,
 но объём favorites растёт вместе с полной популярностью статьи, а не с размером
 страницы.
 
-Нужно:
+Реализовано:
 
 - присоединять автора к основному article query;
 - вычислять `following` и `favorited` через correlated `EXISTS`;
@@ -137,14 +144,20 @@ constraint kind достаточно, а конкретный business conflict 
 Готово, когда число запросов не зависит от числа статей, favorites не
 материализуются в OCaml, а list/feed/find возвращают прежний wire contract.
 
+`EXPLAIN QUERY PLAN` для page query подтверждает `articles_created_at` для
+порядка страницы, составные primary-key indexes для follows/favorites и
+`favorites_article` для count. Дополнительная миграция индекса не требуется.
+
 ## 5. Покрыть application services изолированными тестами
+
+**Статус: выполнено.**
 
 Hurl хорошо закрепляет HTTP contract, но не показывает точную границу
 transaction и не позволяет удобно инъецировать редкие ошибки repository.
 Функторы services уже дают необходимые seams для fake implementations.
 
-Нужно добавить fake `Database`, repositories, `Clock` и `Password_hasher` и
-проверить:
+Добавлены fake `Database`, repositories, `Clock` и `Password_hasher`, которые
+проверяют:
 
 - validation останавливает use case до открытия transaction;
 - фиксированный `Clock.now` передаётся create/update statements;
@@ -160,14 +173,16 @@ transaction и не позволяет удобно инъецировать р�
 
 ## 6. Публиковать и проверять сгенерированный OpenAPI
 
+**Статус: выполнено.**
+
 `typed-endpoint` уже хранит полный compiled endpoint graph и умеет строить
 OpenAPI, но сервер пока монтирует только runtime routes.
 
-Нужно:
+Реализовано:
 
 - задать `Openapi.Config` для RealWorld API;
 - отдавать compiled document по `/openapi.json`;
-- при необходимости добавить простую `/docs`, читающую тот же document;
+- добавить `/docs` и пять renderer routes, читающих тот же document;
 - сохранить canonical OpenAPI snapshot или семантический golden test;
 - проверять operation IDs, security alternatives optional auth, path/query
   codecs, request bodies, response statuses и component schemas;
@@ -178,20 +193,22 @@ Opium; отдельный вручную поддерживаемый YAML не 
 
 ## 7. Отделить credentials от публичного пользователя
 
-`Domain.User.t` сейчас содержит `password_hash`, хотя обычные use cases и HTTP
-responses не должны его видеть. Это увеличивает риск случайной сериализации или
+**Статус: выполнено.**
+
+Раньше `Domain.User.t` содержал `password_hash`, хотя обычные use cases и HTTP
+responses не должны его видеть. Это увеличивало риск случайной сериализации или
 логирования credential material.
 
-Нужно:
+Реализовано:
 
 - удалить `password_hash` из обычного `Domain.User.t`;
-- ввести repository-only authentication record, например
-  `User_credentials.t`, содержащий user и password hash;
+- ввести repository-only `User_repository.credentials`, содержащий user и
+  password hash;
 - возвращать credentials только из lookup, используемого login;
 - оставить register/update repositories принимающими hash как входное
   значение, но возвращающими безопасный `User.t`;
-- рассмотреть `Domain.User.Email.t` с нормализацией и валидацией на границе,
-  чтобы repository не принимал произвольную строку email;
+- `Domain.User.Email.t` с нормализацией и валидацией на границе не позволяет
+  repository принимать произвольную строку email;
 - проверить, что DTO, errors и debug output не содержат password/hash.
 
 Готово, когда controller и большинство application services не могут получить
@@ -212,9 +229,9 @@ password hash через тип обычного пользователя.
 Этот этап зависит от будущего API `typed-sql`. Он не блокирует этапы 1–7 и не
 меняет SQL или поведение приложения сам по себе.
 
-## Порядок выполнения
+## История выполнения
 
-Рекомендуемые срезы:
+Пункты 1–7 выполнены следующими срезами:
 
 1. profiles/follows без полных сканов и удаление мёртвых `all_*` statements;
 2. scoped mutations вместе со структурированной классификацией конфликтов;

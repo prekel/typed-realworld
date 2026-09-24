@@ -2,11 +2,16 @@ open! Base
 module Domain = Realworld_domain.Domain
 
 type changes =
-  { email : string option
+  { email : Domain.User.Email.t option
   ; username : Domain.User.Username.t option
   ; password_hash : string option
   ; bio : string Domain.Patch.t
   ; image : string Domain.Patch.t
+  }
+
+type credentials =
+  { user : Domain.User.t
+  ; password_hash : string
   }
 
 module type S = sig
@@ -15,7 +20,7 @@ module type S = sig
 
   val create
     :  conn:connection
-    -> email:string
+    -> email:Domain.User.Email.t
     -> username:Domain.User.Username.t
     -> password_hash:string
     -> ( Domain.User.t
@@ -28,10 +33,10 @@ module type S = sig
     -> Domain.User.id
     -> (Domain.User.t option, Persistence_error.t) Result.t io
 
-  val find_by_email
+  val find_credentials_by_email
     :  conn:connection
-    -> string
-    -> (Domain.User.t option, Persistence_error.t) Result.t io
+    -> Domain.User.Email.t
+    -> (credentials option, Persistence_error.t) Result.t io
 
   val update
     :  conn:connection

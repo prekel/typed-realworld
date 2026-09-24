@@ -80,7 +80,7 @@ struct
 
   let register ~database (registration : Domain.User.registration) =
     match
-      ( Validation.normalized_identity "email" registration.email
+      ( Validation.email registration.email
       , Validation.normalized_identity "username" registration.username
       , Validation.password registration.password )
     with
@@ -106,7 +106,7 @@ struct
   ;;
 
   let login ~database ~email ~password =
-    match Validation.normalized_identity "email" email with
+    match Validation.email email with
     | Error _ -> Lwt.return (Error `Invalid_credentials)
     | Ok email ->
       Database.with_connection
@@ -114,11 +114,12 @@ struct
         ~on_error:(fun error -> `Persistence error)
         ~f:(fun ~conn ->
           let open Lwt.Let_syntax in
-          let%map found = Users.find_by_email ~conn email in
+          let%map found = Users.find_credentials_by_email ~conn email in
           match found with
           | Error error -> Error (`Persistence error)
-          | Ok (Some user) when Hasher.verify ~encoded:user.password_hash password ->
-            Ok user
+          | Ok (Some credentials)
+            when Hasher.verify ~encoded:credentials.password_hash password ->
+            Ok credentials.user
           | Ok _ -> Error `Invalid_credentials)
   ;;
 
@@ -138,7 +139,7 @@ struct
   let update ~database ~user_id (changes : Domain.User.update) =
     let email =
       Option.value_map changes.email ~default:(Ok None) ~f:(fun value ->
-        Result.map (Validation.normalized_identity "email" value) ~f:Option.some)
+        Result.map (Validation.email value) ~f:Option.some)
     in
     let username =
       Option.value_map changes.username ~default:(Ok None) ~f:(fun value ->

@@ -39,9 +39,10 @@ module Make (Backend : Backend.S) = struct
   end
 
   let bearer =
-    Security.Scheme.http_bearer
+    Security.Scheme.api_key
       ~name:"tokenAuth"
-      ~bearer_format:"JWT"
+      ~parameter:"Authorization"
+      ~location:`Header
       ~description:"RealWorld Authorization header: Token <jwt>"
       ()
   ;;

@@ -2,6 +2,7 @@
  (name realworld_http)
  (public_name typed-realworld.http)
  (private_modules
+  api_docs
   article_controller
   comment_controller
   controller_context

@@ -8,6 +8,25 @@
  (modules domain_test)
  (libraries base realworld_domain))
 
+(test
+ (name application_service_test)
+ (modules application_service_test)
+ (libraries base lwt.unix ptime realworld_application realworld_domain)
+ (preprocess
+  (pps ppx_let)))
+
+(test
+ (name openapi_test)
+ (modules openapi_test)
+ (libraries
+  base
+  jsonschema
+  realworld_application
+  realworld_domain
+  realworld_http
+  typed-endpoint-opium
+  yojson))
+
 (executable
  (name schema_integration_test)
  (modules schema_integration_test)
@@ -21,6 +40,21 @@
   realworld_domain
   typed-sql
   typed-sql-caqti-lwt
+  uri)
+ (preprocess
+  (pps ppx_let)))
+
+(executable
+ (name repository_integration_test)
+ (modules repository_integration_test)
+ (libraries
+  base
+  caqti-driver-sqlite3
+  lwt.unix
+  ptime
+  realworld_application
+  realworld_domain
+  realworld_sqlite
   uri)
  (preprocess
   (pps ppx_let)))
@@ -40,4 +74,5 @@
    %{dep:migrations_test.sh}
    %{workspace_root}
    %{exe:schema_integration_test.exe}
-   %{exe:../tools/schema_snapshot.exe})))
+   %{exe:../tools/schema_snapshot.exe}
+   %{exe:repository_integration_test.exe})))

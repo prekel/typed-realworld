@@ -7,8 +7,8 @@ type nonrec connection = connection
 
 let article_by_slug ~conn slug = run ~conn Comment_queries.article_by_slug slug
 
-let comment_of_row ~viewer_id ~all_users ~all_follows row =
-  match find_user_row all_users row.Comments.author_id with
+let comment_of_row ~viewer_id ~authors ~viewer_follows row =
+  match find_user_row authors row.Comments.author_id with
   | None -> Error (Persistence_error.of_string "comment author is missing")
   | Some author ->
     Ok
@@ -17,7 +17,7 @@ let comment_of_row ~viewer_id ~all_users ~all_follows row =
         ; created_at = row.created_at
         ; updated_at = row.updated_at
         ; body = row.body
-        ; author = profile_of_user ~viewer_id ~follows:all_follows author
+        ; author = profile_of_user ~viewer_id ~follows:viewer_follows author
         }
 ;;
 
@@ -27,22 +27,22 @@ let hydrate_comments ~conn ~viewer_id rows =
     |> List.map ~f:(fun row -> row.Comments.author_id)
     |> List.dedup_and_sort ~compare:Int64.compare
   in
-  let%bind found_users = run ~conn User_queries.rows_by_ids author_ids in
-  match found_users with
+  let%bind authors = run ~conn User_queries.rows_by_ids author_ids in
+  match authors with
   | Error _ as error -> Lwt.return error
-  | Ok all_users ->
-    let%bind all_follows =
+  | Ok authors ->
+    let%bind viewer_follows =
       match viewer_id with
       | None -> Lwt.return (Ok [])
       | Some viewer_id ->
         run ~conn User_queries.follows_for_authors { viewer_id; author_ids }
     in
-    (match all_follows with
+    (match viewer_follows with
      | Error _ as error -> Lwt.return error
-     | Ok all_follows ->
+     | Ok viewer_follows ->
        let hydrated =
          rows
-         |> List.map ~f:(comment_of_row ~viewer_id ~all_users ~all_follows)
+         |> List.map ~f:(comment_of_row ~viewer_id ~authors ~viewer_follows)
          |> Result.all
        in
        Lwt.return hydrated)
@@ -97,8 +97,12 @@ let delete ~conn ~author_id ~slug ~comment_id =
               (Int64.equal comment.Comments.author_id (Domain.User.Id.to_int64 author_id))
        -> Lwt.return (Error `Forbidden)
      | Ok (Some comment) ->
-       let%map deleted = run_unit ~conn Comment_queries.delete_comment comment_id in
+       let input : Comment_queries.Delete_comment.t =
+         { comment_id; article_id = article.id; author_id }
+       in
+       let%map deleted = run ~conn Comment_queries.delete_comment input in
        (match deleted with
-        | Ok () -> Ok ()
+        | Ok (Some _) -> Ok ()
+        | Ok None -> Error `Comment_not_found
         | Error error -> Error (`Persistence error)))
 ;;

@@ -4,6 +4,7 @@ set -euo pipefail
 build_root=$(cd -- "$1" && pwd)
 test_binary=$(cd -- "$(dirname -- "$2")" && pwd)/$(basename -- "$2")
 snapshot_binary=$(cd -- "$(dirname -- "$3")" && pwd)/$(basename -- "$3")
+repository_binary=$(cd -- "$(dirname -- "$4")" && pwd)/$(basename -- "$4")
 binary=${DBMATE_BIN:?Run make tools, then make test.}
 version=$(<"$build_root/scripts/dbmate-version")
 [[ $("$binary" --version) == "dbmate version $version" ]]
@@ -53,4 +54,5 @@ export REALWORLD_DATABASE_URL="sqlite3:$test_tmp/fresh.sqlite3"
 dbmate "$build_root/db/migrations/sqlite" up --strict
 "$snapshot_binary" "$REALWORLD_DATABASE_URL" > "$test_tmp/fresh.json"
 cmp "$test_tmp/upgraded.json" "$test_tmp/fresh.json"
+"$repository_binary" "$REALWORLD_DATABASE_URL"
 printf 'Migration, upgrade, rollback, snapshot and generated-query tests passed.\n'

@@ -7,6 +7,7 @@ val combine : t list -> t
 val is_empty : t -> bool
 val blank : string -> bool
 val normalized_identity : string -> string -> (string, t) Result.t
+val email : string -> (Realworld_domain.Domain.User.Email.t, t) Result.t
 
 val normalized_optional_text
   :  string Realworld_domain.Domain.Patch.t

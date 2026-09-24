@@ -67,7 +67,9 @@ end
 module User = struct
   module Id = Make_id ()
 
-  module Username : STRING_VALUE = struct
+  module Make_identity (Name : sig
+      val value : string
+    end) : STRING_VALUE = struct
     type t = string
 
     let of_string value =
@@ -82,20 +84,43 @@ module User = struct
     ;;
 
     let of_string_exn value =
-      of_string value |> Option.value_exn ~message:"invalid username"
+      of_string value |> Option.value_exn ~message:("invalid " ^ Name.value)
     ;;
 
     let to_string value = value
     let equal = String.equal
   end
 
+  module Email : STRING_VALUE = struct
+    type t = string
+
+    let of_string value =
+      let value = String.strip value |> String.lowercase in
+      match String.split value ~on:'@' with
+      | [ local; domain ]
+        when (not (String.is_empty local))
+             && (not (String.is_empty domain))
+             && String.for_all value ~f:(fun character ->
+               Char.to_int character < 128 && not (Char.is_whitespace character)) ->
+        Some value
+      | _ -> None
+    ;;
+
+    let of_string_exn value = of_string value |> Option.value_exn ~message:"invalid email"
+    let to_string value = value
+    let equal = String.equal
+  end
+
+  module Username = Make_identity (struct
+      let value = "username"
+    end)
+
   type id = Id.t
 
   type t =
     { id : id
-    ; email : string
+    ; email : Email.t
     ; username : Username.t
-    ; password_hash : string
     ; bio : string option
     ; image : string option
     }

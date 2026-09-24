@@ -1,5 +1,8 @@
 open! Base
 
+(** Metadata used to generate the OpenAPI document served by the application. *)
+val openapi_config : Typed_endpoint.Openapi.Config.t
+
 (** Compiles the transport-independent controller groups for a concrete Lwt
     backend. Infrastructure implementations are supplied by the composition
     root and never imported by this library. *)

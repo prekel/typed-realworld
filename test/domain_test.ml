@@ -7,6 +7,12 @@ let () =
   assert (Option.is_none (Domain.Comment.Id.of_string "not-an-id"));
   assert (Option.is_none (Domain.Comment.Id.of_string "0"));
   assert (Option.is_none (Domain.User.Username.of_string ""));
+  assert (Option.is_none (Domain.User.Email.of_string "not-an-email"));
+  assert (Option.is_none (Domain.User.Email.of_string "a @example.test"));
+  assert (
+    Domain.User.Email.of_string " Alice@Example.Test "
+    |> Option.exists ~f:(fun email ->
+      String.equal (Domain.User.Email.to_string email) "alice@example.test"));
   assert (
     Domain.User.Username.of_string " Alice "
     |> Option.exists ~f:(fun username ->

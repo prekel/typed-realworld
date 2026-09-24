@@ -4,6 +4,7 @@
  (libraries
   base
   caqti-driver-sqlite3
+  cohttp
   lwt.unix
   ptime.clock.os
   mirage-crypto-rng.unix

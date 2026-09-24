@@ -40,6 +40,9 @@
 - Идентификаторы сущностей — разные абстрактные доменные типы (`User.Id`,
   `Article.Id`, `Comment.Id`) поверх положительного `int64`. Преобразование в
   SQL и transport primitives выполняется только на границах.
+- Нормализованные identity values также имеют отдельные доменные типы:
+  repository принимает `User.Email` и `User.Username`, а не произвольные
+  строки.
 - Path/query codecs сразу возвращают доменные значения (`User.Username`,
   `Article.Slug`, `Page.Limit`, `Page.Offset`); controller handler не принимает
   промежуточные transport primitives и не валидирует их вручную.

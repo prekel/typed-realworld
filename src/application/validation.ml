@@ -18,6 +18,14 @@ let normalized_identity field_name value =
     Ok value
 ;;
 
+let email value =
+  match normalized_identity "email" value with
+  | Error _ as error -> error
+  | Ok value ->
+    Realworld_domain.Domain.User.Email.of_string value
+    |> Result.of_option ~error:(field "email" "is invalid")
+;;
+
 let normalized_optional_text = function
   | Realworld_domain.Domain.Patch.Keep -> Realworld_domain.Domain.Patch.Keep
   | Clear -> Realworld_domain.Domain.Patch.Clear

@@ -30,7 +30,7 @@ let user ~token (user : Domain.User.t) =
   `Assoc
     [ ( "user"
       , `Assoc
-          [ "email", `String user.email
+          [ "email", `String (Domain.User.Email.to_string user.email)
           ; "token", `String token
           ; "username", `String (Domain.User.Username.to_string user.username)
           ; "bio", null_or_string user.bio
@@ -39,7 +39,7 @@ let user ~token (user : Domain.User.t) =
     ]
 ;;
 
-let article_json ~include_body (article : Domain.Article.t) =
+let article_value ~include_body (article : Domain.Article.t) =
   let fields =
     [ "slug", `String (Domain.Article.Slug.to_string article.slug)
     ; "title", `String article.title
@@ -61,43 +61,30 @@ let article_json ~include_body (article : Domain.Article.t) =
     else
       fields
   in
-  `Assoc [ "article", `Assoc fields ]
+  `Assoc fields
 ;;
 
-let article = article_json
+let article ~include_body value = `Assoc [ "article", article_value ~include_body value ]
 
 let articles articles ~count =
-  let item article =
-    match article_json ~include_body:false article with
-    | `Assoc [ (_, value) ] -> value
-    | _ -> assert false
-  in
-  `Assoc [ "articles", `List (List.map articles ~f:item); "articlesCount", `Int count ]
-;;
-
-let comment_json (comment : Domain.Comment.t) =
   `Assoc
-    [ ( "comment"
-      , `Assoc
-          [ "id", `Intlit (Domain.Comment.Id.to_string comment.id)
-          ; "createdAt", timestamp comment.created_at
-          ; "updatedAt", timestamp comment.updated_at
-          ; "body", `String comment.body
-          ; "author", profile comment.author
-          ] )
+    [ "articles", `List (List.map articles ~f:(article_value ~include_body:false))
+    ; "articlesCount", `Int count
     ]
 ;;
 
-let comment = comment_json
-
-let comments comments =
-  let item comment =
-    match comment_json comment with
-    | `Assoc [ (_, value) ] -> value
-    | _ -> assert false
-  in
-  `Assoc [ "comments", `List (List.map comments ~f:item) ]
+let comment_value (comment : Domain.Comment.t) =
+  `Assoc
+    [ "id", `Intlit (Domain.Comment.Id.to_string comment.id)
+    ; "createdAt", timestamp comment.created_at
+    ; "updatedAt", timestamp comment.updated_at
+    ; "body", `String comment.body
+    ; "author", profile comment.author
+    ]
 ;;
+
+let comment value = `Assoc [ "comment", comment_value value ]
+let comments comments = `Assoc [ "comments", `List (List.map comments ~f:comment_value) ]
 
 let tags values =
   `Assoc [ "tags", `List (List.map values ~f:(fun value -> `String value)) ]
@@ -153,12 +140,98 @@ let article_tags values =
   |> Result.all
 ;;
 
-let metadata name description =
-  Typed_endpoint.Metadata.v
-    ~schema:Typed_endpoint.Json_schema.any
-    ~schema_name:name
-    ~description
-    ()
+let object_schema ~required properties =
+  let schema property = Typed_endpoint.Json_schema.to_yojson property in
+  Typed_endpoint.Json_schema.Unsafe.of_yojson
+    (`Assoc
+        [ "type", `String "object"
+        ; ( "properties"
+          , `Assoc (List.map properties ~f:(fun (name, value) -> name, schema value)) )
+        ; "required", `List (List.map required ~f:(fun name -> `String name))
+        ; "additionalProperties", `Bool false
+        ])
+;;
+
+let string = Typed_endpoint.Json_schema.string_exn ()
+let non_empty_string = Typed_endpoint.Json_schema.string_exn ~min_length:1 ()
+let email = Typed_endpoint.Json_schema.string_exn ~format:`Email ~min_length:1 ()
+let password = Typed_endpoint.Json_schema.string_exn ~format:`Password ~min_length:1 ()
+let nullable_string = Typed_endpoint.Json_schema.nullable string
+let string_array = Typed_endpoint.Json_schema.array_exn ~items:string ()
+let timestamp_schema = Typed_endpoint.Json_schema.string_exn ~format:`Date_time ()
+let positive_int64 = Typed_endpoint.Json_schema.integer_exn ~format:`Int64 ~minimum:1 ()
+let non_negative_int = Typed_endpoint.Json_schema.integer_exn ~minimum:0 ()
+
+let profile_schema =
+  object_schema
+    ~required:[ "username"; "bio"; "image"; "following" ]
+    [ "username", non_empty_string
+    ; "bio", nullable_string
+    ; "image", nullable_string
+    ; "following", Typed_endpoint.Json_schema.boolean ()
+    ]
+;;
+
+let user_schema =
+  object_schema
+    ~required:[ "email"; "token"; "username"; "bio"; "image" ]
+    [ "email", email
+    ; "token", non_empty_string
+    ; "username", non_empty_string
+    ; "bio", nullable_string
+    ; "image", nullable_string
+    ]
+;;
+
+let article_schema ~include_body =
+  let required =
+    [ "slug"
+    ; "title"
+    ; "description"
+    ; "tagList"
+    ; "createdAt"
+    ; "updatedAt"
+    ; "favorited"
+    ; "favoritesCount"
+    ; "author"
+    ]
+  in
+  let required, properties =
+    if include_body then
+      "body" :: required, [ "body", string ]
+    else
+      required, []
+  in
+  object_schema
+    ~required
+    (properties
+     @ [ "slug", non_empty_string
+       ; "title", string
+       ; "description", string
+       ; "tagList", string_array
+       ; "createdAt", timestamp_schema
+       ; "updatedAt", timestamp_schema
+       ; "favorited", Typed_endpoint.Json_schema.boolean ()
+       ; "favoritesCount", non_negative_int
+       ; "author", profile_schema
+       ])
+;;
+
+let comment_schema =
+  object_schema
+    ~required:[ "id"; "createdAt"; "updatedAt"; "body"; "author" ]
+    [ "id", positive_int64
+    ; "createdAt", timestamp_schema
+    ; "updatedAt", timestamp_schema
+    ; "body", string
+    ; "author", profile_schema
+    ]
+;;
+
+let envelope name schema = object_schema ~required:[ name ] [ name, schema ]
+
+let metadata ~schema name description =
+  Typed_endpoint.Metadata.v ~schema ~schema_name:name ~description ()
 ;;
 
 let nested json name =
@@ -172,7 +245,12 @@ module Error_response = struct
   type t = (string * string list) list
 
   let metadata : t Typed_endpoint.Metadata.t =
-    metadata "Errors" "Validation or request errors grouped by field"
+    let messages = Typed_endpoint.Json_schema.array_exn ~items:string () in
+    let fields = Typed_endpoint.Json_schema.dictionary ~values:messages in
+    metadata
+      ~schema:(envelope "errors" fields)
+      "Errors"
+      "Validation or request errors grouped by field"
   ;;
 
   let make fields = fields
@@ -186,7 +264,7 @@ module User_response = struct
     }
 
   let metadata : t Typed_endpoint.Metadata.t =
-    metadata "UserResponse" "Authenticated user"
+    metadata ~schema:(envelope "user" user_schema) "UserResponse" "Authenticated user"
   ;;
 
   let make ~token user = { token; user }
@@ -196,7 +274,10 @@ end
 module Profile_response = struct
   type t = Domain.Profile.t
 
-  let metadata : t Typed_endpoint.Metadata.t = metadata "ProfileResponse" "User profile"
+  let metadata : t Typed_endpoint.Metadata.t =
+    metadata ~schema:(envelope "profile" profile_schema) "ProfileResponse" "User profile"
+  ;;
+
   let make value = value
   let to_yojson value = `Assoc [ "profile", profile value ]
 end
@@ -204,7 +285,13 @@ end
 module Article_response = struct
   type t = Domain.Article.t
 
-  let metadata : t Typed_endpoint.Metadata.t = metadata "ArticleResponse" "Article"
+  let metadata : t Typed_endpoint.Metadata.t =
+    metadata
+      ~schema:(envelope "article" (article_schema ~include_body:true))
+      "ArticleResponse"
+      "Article"
+  ;;
+
   let make value = value
   let to_yojson value = article ~include_body:true value
 end
@@ -216,7 +303,16 @@ module Articles_response = struct
     }
 
   let metadata : t Typed_endpoint.Metadata.t =
-    metadata "ArticlesResponse" "A page of articles"
+    let article_list =
+      Typed_endpoint.Json_schema.array_exn ~items:(article_schema ~include_body:false) ()
+    in
+    metadata
+      ~schema:
+        (object_schema
+           ~required:[ "articles"; "articlesCount" ]
+           [ "articles", article_list; "articlesCount", non_negative_int ])
+      "ArticlesResponse"
+      "A page of articles"
   ;;
 
   let make ~articles ~count = { articles; count }
@@ -226,7 +322,10 @@ end
 module Comment_response = struct
   type t = Domain.Comment.t
 
-  let metadata : t Typed_endpoint.Metadata.t = metadata "CommentResponse" "Comment"
+  let metadata : t Typed_endpoint.Metadata.t =
+    metadata ~schema:(envelope "comment" comment_schema) "CommentResponse" "Comment"
+  ;;
+
   let make value = value
   let to_yojson value = comment value
 end
@@ -235,7 +334,13 @@ module Comments_response = struct
   type t = Domain.Comment.t list
 
   let metadata : t Typed_endpoint.Metadata.t =
-    metadata "CommentsResponse" "Article comments"
+    metadata
+      ~schema:
+        (envelope
+           "comments"
+           (Typed_endpoint.Json_schema.array_exn ~items:comment_schema ()))
+      "CommentsResponse"
+      "Article comments"
   ;;
 
   let make values = values
@@ -245,7 +350,10 @@ end
 module Tags_response = struct
   type t = string list
 
-  let metadata : t Typed_endpoint.Metadata.t = metadata "TagsResponse" "Known tags"
+  let metadata : t Typed_endpoint.Metadata.t =
+    metadata ~schema:(envelope "tags" string_array) "TagsResponse" "Known tags"
+  ;;
+
   let make values = values
   let to_yojson values = tags values
 end
@@ -254,7 +362,15 @@ module Registration_request = struct
   type t = Domain.User.registration
 
   let metadata : t Typed_endpoint.Metadata.t =
-    metadata "RegistrationRequest" "New user registration"
+    let registration =
+      object_schema
+        ~required:[ "email"; "username"; "password" ]
+        [ "email", email; "username", non_empty_string; "password", password ]
+    in
+    metadata
+      ~schema:(envelope "user" registration)
+      "RegistrationRequest"
+      "New user registration"
   ;;
 
   let of_yojson json =
@@ -273,7 +389,14 @@ module Login_request = struct
     ; password : string
     }
 
-  let metadata : t Typed_endpoint.Metadata.t = metadata "LoginRequest" "User credentials"
+  let metadata : t Typed_endpoint.Metadata.t =
+    let credentials =
+      object_schema
+        ~required:[ "email"; "password" ]
+        [ "email", email; "password", password ]
+    in
+    metadata ~schema:(envelope "user" credentials) "LoginRequest" "User credentials"
+  ;;
 
   let of_yojson json =
     let open Result.Let_syntax in
@@ -290,7 +413,20 @@ module User_update_request = struct
     | Invalid of string * string
 
   let metadata : t Typed_endpoint.Metadata.t =
-    metadata "UserUpdateRequest" "Fields to update on the current user"
+    let update =
+      object_schema
+        ~required:[]
+        [ "email", email
+        ; "username", non_empty_string
+        ; "password", password
+        ; "bio", nullable_string
+        ; "image", nullable_string
+        ]
+    in
+    metadata
+      ~schema:(envelope "user" update)
+      "UserUpdateRequest"
+      "Fields to update on the current user"
   ;;
 
   let of_yojson json =
@@ -316,7 +452,16 @@ module Article_create_request = struct
   type t = Domain.Article.create
 
   let metadata : t Typed_endpoint.Metadata.t =
-    metadata "ArticleCreateRequest" "A new article"
+    let create =
+      object_schema
+        ~required:[ "title"; "description"; "body" ]
+        [ "title", non_empty_string
+        ; "description", non_empty_string
+        ; "body", non_empty_string
+        ; "tagList", string_array
+        ]
+    in
+    metadata ~schema:(envelope "article" create) "ArticleCreateRequest" "A new article"
   ;;
 
   let of_yojson json =
@@ -344,7 +489,19 @@ module Article_update_request = struct
     | Invalid_tag_list
 
   let metadata : t Typed_endpoint.Metadata.t =
-    metadata "ArticleUpdateRequest" "Fields to update on an article"
+    let update =
+      object_schema
+        ~required:[]
+        [ "title", non_empty_string
+        ; "description", non_empty_string
+        ; "body", non_empty_string
+        ; "tagList", string_array
+        ]
+    in
+    metadata
+      ~schema:(envelope "article" update)
+      "ArticleUpdateRequest"
+      "Fields to update on an article"
   ;;
 
   let of_yojson json =
@@ -367,7 +524,11 @@ module Comment_create_request = struct
   type t = string
 
   let metadata : t Typed_endpoint.Metadata.t =
-    metadata "CommentCreateRequest" "A new article comment"
+    let create = object_schema ~required:[ "body" ] [ "body", non_empty_string ] in
+    metadata
+      ~schema:(envelope "comment" create)
+      "CommentCreateRequest"
+      "A new article comment"
   ;;
 
   let of_yojson json =

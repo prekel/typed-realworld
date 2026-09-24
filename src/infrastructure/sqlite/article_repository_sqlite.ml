@@ -5,12 +5,44 @@ open Lwt.Let_syntax
 type nonrec 'a io = 'a io
 type nonrec connection = connection
 
+let hydrate_tags ~conn articles =
+  let article_ids =
+    List.map articles ~f:(fun (article : Domain.Article.t) ->
+      Domain.Article.Id.to_int64 article.id)
+  in
+  if List.is_empty article_ids then
+    Lwt.return (Ok articles)
+  else (
+    let%map found = run ~conn Article_queries.article_tags_by_article_ids article_ids in
+    Result.map found ~f:(fun tags ->
+      List.map articles ~f:(fun (article : Domain.Article.t) ->
+        let article_id = Domain.Article.Id.to_int64 article.id in
+        let tag_list =
+          tags
+          |> List.filter ~f:(fun (tag : Article_queries.article_tag) ->
+            Int64.equal tag.article_id article_id)
+          |> List.map ~f:(fun (tag : Article_queries.article_tag) -> tag.name)
+        in
+        { article with tag_list })))
+;;
+
+let read_article ~conn ~viewer_id slug =
+  let input : Article_queries.Read_by_slug.t = { viewer_id; slug } in
+  let%bind found = run ~conn Article_queries.read_by_slug input in
+  match found with
+  | Error _ as error -> Lwt.return error
+  | Ok None -> Lwt.return (Ok None)
+  | Ok (Some article) ->
+    let%map hydrated = hydrate_tags ~conn [ article ] in
+    Result.map hydrated ~f:(fun articles -> List.hd_exn articles |> Option.some)
+;;
+
 let page ~conn ~viewer_id ~filters ~followed_by pagination =
   let%bind rows =
     run
       ~conn
       Article_queries.page
-      { Article_queries.Page.filters; followed_by; page = pagination }
+      { Article_queries.Page.filters; viewer_id; followed_by; page = pagination }
   in
   match rows with
   | Error _ as error -> Lwt.return error
@@ -21,7 +53,7 @@ let page ~conn ~viewer_id ~filters ~followed_by pagination =
     (match count with
      | Error _ as error -> Lwt.return error
      | Ok count ->
-       let%map hydrated = hydrate_articles ~conn ~viewer_id rows in
+       let%map hydrated = hydrate_tags ~conn rows in
        Result.map hydrated ~f:(fun articles ->
          { Application.Article_repository.articles; count = Int64.to_int_exn count }))
 ;;
@@ -77,12 +109,10 @@ let create ~conn ~author_id ~slug ~now (article : Domain.Article.create) =
     ; now
     }
   in
-  let%bind inserted = run ~conn Article_queries.create_article input in
+  let%bind inserted = run_raw ~conn Article_queries.create_article input in
   match inserted with
-  | Error error
-    when String.is_substring (Persistence_error.to_string error) ~substring:"constraint"
-    -> Lwt.return (Error `Slug_taken)
-  | Error error -> Lwt.return (Error (`Persistence error))
+  | Error error when constraint_is_unique error -> Lwt.return (Error `Slug_taken)
+  | Error error -> Lwt.return (Error (`Persistence (persistence error)))
   | Ok row ->
     let%bind synced =
       sync_tags ~conn ~article_id:row.id (normalize_tags article.tag_list) 0
@@ -104,51 +134,47 @@ let create ~conn ~author_id ~slug ~now (article : Domain.Article.create) =
 ;;
 
 let update ~conn ~author_id ~slug ~new_slug ~now (changes : Domain.Article.update) =
-  let%bind current = read_article ~conn ~viewer_id:(Some author_id) slug in
-  match current with
+  let%bind raw = run ~conn Article_queries.by_slug slug in
+  match raw with
   | Error error -> Lwt.return (Error (`Persistence error))
   | Ok None -> Lwt.return (Error `Not_found)
-  | Ok (Some _) ->
-    let%bind raw = run ~conn Article_queries.by_slug slug in
-    (match raw with
-     | Error error -> Lwt.return (Error (`Persistence error))
+  | Ok (Some raw) when not (Int64.equal raw.author_id (Domain.User.Id.to_int64 author_id))
+    -> Lwt.return (Error `Forbidden)
+  | Ok (Some raw) ->
+    let title = Option.value changes.title ~default:raw.title in
+    let description = Option.value changes.description ~default:raw.description in
+    let body = Option.value changes.body ~default:raw.body in
+    let slug' =
+      Option.value new_slug ~default:(Domain.Article.Slug.of_string_exn raw.slug)
+    in
+    let input : Article_queries.Update_article.t =
+      { id = raw.id; author_id; slug = slug'; title; description; body; now }
+    in
+    let%bind changed = run_raw ~conn Article_queries.update_article input in
+    (match changed with
+     | Error error when constraint_is_unique error -> Lwt.return (Error `Slug_taken)
+     | Error error -> Lwt.return (Error (`Persistence (persistence error)))
      | Ok None -> Lwt.return (Error `Not_found)
-     | Ok (Some raw)
-       when not (Int64.equal raw.author_id (Domain.User.Id.to_int64 author_id)) ->
-       Lwt.return (Error `Forbidden)
-     | Ok (Some raw) ->
-       let title = Option.value changes.title ~default:raw.title in
-       let description = Option.value changes.description ~default:raw.description in
-       let body = Option.value changes.body ~default:raw.body in
-       let slug' =
-         Option.value new_slug ~default:(Domain.Article.Slug.of_string_exn raw.slug)
+     | Ok (Some _) ->
+       let%bind tag_changed =
+         match changes.tag_list with
+         | None -> Lwt.return (Ok ())
+         | Some names ->
+           let%bind removed = run_unit ~conn Article_queries.clear_tags raw.id in
+           (match removed with
+            | Error _ as error -> Lwt.return error
+            | Ok () -> sync_tags ~conn ~article_id:raw.id (normalize_tags names) 0)
        in
-       let input : Article_queries.Update_article.t =
-         { id = raw.id; slug = slug'; title; description; body; now }
-       in
-       let%bind changed = run_unit ~conn Article_queries.update_article input in
-       (match changed with
+       (match tag_changed with
         | Error error -> Lwt.return (Error (`Persistence error))
         | Ok () ->
-          let%bind tag_changed =
-            match changes.tag_list with
-            | None -> Lwt.return (Ok ())
-            | Some names ->
-              let%bind removed = run_unit ~conn Article_queries.clear_tags raw.id in
-              (match removed with
-               | Error _ as error -> Lwt.return error
-               | Ok () -> sync_tags ~conn ~article_id:raw.id (normalize_tags names) 0)
-          in
-          (match tag_changed with
-           | Error error -> Lwt.return (Error (`Persistence error))
-           | Ok () ->
-             let%map reread = read_article ~conn ~viewer_id:(Some author_id) slug' in
-             (match reread with
-              | Ok (Some article) -> Ok article
-              | Ok None ->
-                Error
-                  (`Persistence (Persistence_error.of_string "updated article is missing"))
-              | Error error -> Error (`Persistence error)))))
+          let%map reread = read_article ~conn ~viewer_id:(Some author_id) slug' in
+          (match reread with
+           | Ok (Some article) -> Ok article
+           | Ok None ->
+             Error
+               (`Persistence (Persistence_error.of_string "updated article is missing"))
+           | Error error -> Error (`Persistence error))))
 ;;
 
 let delete ~conn ~author_id ~slug =
@@ -159,9 +185,11 @@ let delete ~conn ~author_id ~slug =
   | Ok (Some raw) when not (Int64.equal raw.author_id (Domain.User.Id.to_int64 author_id))
     -> Lwt.return (Error `Forbidden)
   | Ok (Some raw) ->
-    let%map deleted = run_unit ~conn Article_queries.delete_article raw.id in
+    let input : Article_queries.Delete_article.t = { id = raw.id; author_id } in
+    let%map deleted = run ~conn Article_queries.delete_article input in
     (match deleted with
-     | Ok () -> Ok ()
+     | Ok (Some _) -> Ok ()
+     | Ok None -> Error `Not_found
      | Error error -> Error (`Persistence error))
 ;;
 

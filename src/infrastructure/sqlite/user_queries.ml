@@ -2,55 +2,31 @@ open! Base
 open Typed_sql
 open Infix
 module User = Realworld_domain.Domain.User
+module User_repository = Realworld_application.User_repository
 module Users = Schema.Users
 module Follows = Schema.Follows
 
 let projection reference =
-  Projection.map (Users.projection reference) ~f:(fun row ->
-    User.
-      { id = User.Id.of_int64_exn row.id
-      ; email = row.email
-      ; username = User.Username.of_string_exn row.username
-      ; password_hash = row.password_hash
-      ; bio = row.bio
-      ; image = row.image
-      })
+  let open Projection.Let_syntax in
+  let%map id = Projection.expr (Users.id reference)
+  and email = Projection.expr (Users.email reference)
+  and username = Projection.expr (Users.username reference)
+  and bio = Projection.expr (Users.bio reference)
+  and image = Projection.expr (Users.image reference) in
+  User.
+    { id = Id.of_int64_exn id
+    ; email = Email.of_string_exn email
+    ; username = Username.of_string_exn username
+    ; bio
+    ; image
+    }
 ;;
 
-let all_rows : (unit, Users.t list, Dialect.portable) Statement.t =
-  Statement.Portable.query_many_exn (fun _ ->
-    Query.(from Users.table |> select Users.projection))
-;;
-
-let%expect_test "all users SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite all_rows);
-  [%expect
-    {|
-    SELECT
-      t0."id",
-      t0."email",
-      t0."username",
-      t0."password_hash",
-      t0."bio",
-      t0."image"
-    FROM "users" AS t0
-    |}]
-;;
-
-let all_follows : (unit, Follows.t list, Dialect.portable) Statement.t =
-  Statement.Portable.query_many_exn (fun _ ->
-    Query.(from Follows.table |> select Follows.projection))
-;;
-
-let%expect_test "all follows SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite all_follows);
-  [%expect
-    {|
-    SELECT
-      t0."follower_id",
-      t0."followed_id"
-    FROM "follows" AS t0
-    |}]
+let credentials_projection reference =
+  let open Projection.Let_syntax in
+  let%map user = projection reference
+  and password_hash = Projection.expr (Users.password_hash reference) in
+  { User_repository.user; password_hash }
 ;;
 
 let rows_by_ids =
@@ -58,7 +34,7 @@ let rows_by_ids =
     Query.(
       from Users.table
       |> where (fun user -> Expr.in_ (Users.id user) ids)
-      |> select Users.projection))
+      |> select projection))
 ;;
 
 let%expect_test "users by IDs SQL" =
@@ -70,7 +46,6 @@ let%expect_test "users by IDs SQL" =
       t0."id",
       t0."email",
       t0."username",
-      t0."password_hash",
       t0."bio",
       t0."image"
     FROM "users" AS t0
@@ -142,7 +117,6 @@ let%expect_test "user by ID SQL" =
       t0."id",
       t0."email",
       t0."username",
-      t0."password_hash",
       t0."bio",
       t0."image"
     FROM "users" AS t0
@@ -152,27 +126,27 @@ let%expect_test "user by ID SQL" =
     |}]
 ;;
 
-let by_email =
+let credentials_by_email =
   Statement.Portable.query_optional_exn (fun params ->
-    let email = params.column Users.email_column ~get:Fn.id in
+    let email = params.column Users.email_column ~get:User.Email.to_string in
     Query.(
       from Users.table
       |> where (fun user -> Users.email user =. email)
       |> limit_one
-      |> select projection))
+      |> select credentials_projection))
 ;;
 
-let%expect_test "user by email SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite by_email);
+let%expect_test "credentials by email SQL" =
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite credentials_by_email);
   [%expect
     {|
     SELECT
       t0."id",
       t0."email",
       t0."username",
-      t0."password_hash",
       t0."bio",
-      t0."image"
+      t0."image",
+      t0."password_hash"
     FROM "users" AS t0
     WHERE
       (t0."email" = ?1)
@@ -187,7 +161,7 @@ let by_username =
       from Users.table
       |> where (fun user -> Users.username user =. username)
       |> limit_one
-      |> select Users.projection))
+      |> select projection))
 ;;
 
 let%expect_test "user by username SQL" =
@@ -198,7 +172,6 @@ let%expect_test "user by username SQL" =
       t0."id",
       t0."email",
       t0."username",
-      t0."password_hash",
       t0."bio",
       t0."image"
     FROM "users" AS t0
@@ -208,20 +181,94 @@ let%expect_test "user by username SQL" =
     |}]
 ;;
 
+module Profile_by_username = struct
+  type t =
+    { viewer_id : User.Id.t option
+    ; username : User.Username.t
+    }
+  [@@deriving fields ~getters]
+
+  let viewer_id_value input = Option.map input.viewer_id ~f:User.Id.to_int64
+  let username_value input = User.Username.to_string input.username
+end
+
+let profile_by_username =
+  Statement.Portable.query_optional_exn (fun params ->
+    let viewer_id =
+      params.expr (Db_type.option Db_type.int64) ~get:Profile_by_username.viewer_id_value
+    in
+    let username =
+      params.column Users.username_column ~get:Profile_by_username.username_value
+    in
+    Query.(
+      from Users.table
+      |> where (fun user -> Users.username user =. username)
+      |> limit_one
+      |> select (fun user ->
+        let followed_id =
+          from Follows.table
+          |> where (fun follow ->
+            Expr.to_nullable (Follows.follower_id follow)
+            =. viewer_id
+            &&. (Follows.followed_id follow =. Users.id user))
+          |> limit_one
+          |> select_scalar Follows.followed_id
+          |> Expr.scalar_subquery
+        in
+        let open Projection.Let_syntax in
+        let%map username = Projection.expr (Users.username user)
+        and bio = Projection.expr (Users.bio user)
+        and image = Projection.expr (Users.image user)
+        and followed_id = Projection.expr followed_id in
+        Realworld_domain.Domain.Profile.
+          { username = User.Username.of_string_exn username
+          ; bio
+          ; image
+          ; following = Option.is_some followed_id
+          })))
+;;
+
+let%expect_test "profile by username SQL" =
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite profile_by_username);
+  [%expect
+    {|
+    SELECT
+      t0."username",
+      t0."bio",
+      t0."image",
+      (
+        SELECT
+          t1."followed_id"
+        FROM "follows" AS t1
+        WHERE
+          (
+            (t1."follower_id" = ?1)
+            AND (t1."followed_id" = t0."id")
+          )
+        LIMIT 1
+      )
+    FROM "users" AS t0
+    WHERE
+      (t0."username" = ?2)
+    LIMIT 1
+    |}]
+;;
+
 module Create_user = struct
   type t =
-    { email : string
+    { email : User.Email.t
     ; username : User.Username.t
     ; password_hash : string
     }
   [@@deriving fields ~getters]
 
+  let email_value input = User.Email.to_string input.email
   let username_value input = User.Username.to_string input.username
 end
 
 let create_user =
   Statement.Portable.expect_one_exn (fun params ->
-    let email = params.column Users.email_column ~get:Create_user.email in
+    let email = params.column Users.email_column ~get:Create_user.email_value in
     let username = params.column Users.username_column ~get:Create_user.username_value in
     let password_hash =
       params.column Users.password_hash_column ~get:Create_user.password_hash
@@ -233,7 +280,7 @@ let create_user =
       |> set_expr Users.password_hash_column password_hash
       |> set Users.bio_column None
       |> set Users.image_column None
-      |> returning Users.projection))
+      |> returning projection))
 ;;
 
 let%expect_test "create user SQL" =
@@ -253,7 +300,6 @@ let%expect_test "create user SQL" =
       "id",
       "email",
       "username",
-      "password_hash",
       "bio",
       "image"
     |}]
@@ -262,37 +308,33 @@ let%expect_test "create user SQL" =
 module Update_user = struct
   type t =
     { id : User.Id.t
-    ; email : string
+    ; email : User.Email.t
     ; username : User.Username.t
-    ; password_hash : string
     ; bio : string option
     ; image : string option
     }
   [@@deriving fields ~getters]
 
   let id_value input = User.Id.to_int64 input.id
+  let email_value input = User.Email.to_string input.email
   let username_value input = User.Username.to_string input.username
 end
 
 let update_user =
-  Statement.Portable.expect_one_exn (fun params ->
+  Statement.Portable.expect_optional_exn (fun params ->
     let id = params.column Users.id_column ~get:Update_user.id_value in
-    let email = params.column Users.email_column ~get:Update_user.email in
+    let email = params.column Users.email_column ~get:Update_user.email_value in
     let username = params.column Users.username_column ~get:Update_user.username_value in
-    let password_hash =
-      params.column Users.password_hash_column ~get:Update_user.password_hash
-    in
     let bio = params.column Users.bio_column ~get:Update_user.bio in
     let image = params.column Users.image_column ~get:Update_user.image in
     Update.(
       table Users.table
       |> set_expr Users.email_column email
       |> set_expr Users.username_column username
-      |> set_expr Users.password_hash_column password_hash
       |> set_expr Users.bio_column bio
       |> set_expr Users.image_column image
       |> where (fun user -> Users.id user =. id)
-      |> returning Users.projection))
+      |> returning projection))
 ;;
 
 let%expect_test "update user SQL" =
@@ -303,18 +345,51 @@ let%expect_test "update user SQL" =
     SET
       "email" = ?1,
       "username" = ?2,
-      "password_hash" = ?3,
-      "bio" = ?4,
-      "image" = ?5
+      "bio" = ?3,
+      "image" = ?4
     WHERE
-      ("id" = ?6)
+      ("id" = ?5)
     RETURNING
       "id",
       "email",
       "username",
-      "password_hash",
       "bio",
       "image"
+    |}]
+;;
+
+module Update_password = struct
+  type t =
+    { id : User.Id.t
+    ; password_hash : string
+    }
+  [@@deriving fields ~getters]
+
+  let id_value input = User.Id.to_int64 input.id
+end
+
+let update_password =
+  Statement.Portable.command_exn (fun params ->
+    let id = params.column Users.id_column ~get:Update_password.id_value in
+    let password_hash =
+      params.column Users.password_hash_column ~get:Update_password.password_hash
+    in
+    Update.(
+      table Users.table
+      |> set_expr Users.password_hash_column password_hash
+      |> where (fun user -> Users.id user =. id)
+      |> command))
+;;
+
+let%expect_test "update password SQL" =
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite update_password);
+  [%expect
+    {|
+    UPDATE "users"
+    SET
+      "password_hash" = ?1
+    WHERE
+      ("id" = ?2)
     |}]
 ;;
 

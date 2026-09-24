@@ -246,11 +246,15 @@ let email = "before'upgrade@example.test"
 let seed conn = execute ~conn insert_user { id = 1L; email; username = "before-upgrade" }
 
 let check_user conn =
-  let%bind result = Adapter.run ~conn Realworld_sqlite.User_queries.by_email email in
-  let user = or_fail result |> Option.value_exn in
+  let email = Domain.User.Email.of_string_exn email in
+  let%bind result =
+    Adapter.run ~conn Realworld_sqlite.User_queries.credentials_by_email email
+  in
+  let credentials = or_fail result |> Option.value_exn in
+  let user = credentials.user in
   assert (Domain.User.Id.equal user.id (Domain.User.Id.of_int64_exn 1L));
   assert (String.equal (Domain.User.Username.to_string user.username) "before-upgrade");
-  assert (String.equal user.password_hash "test-hash");
+  assert (String.equal credentials.password_hash "test-hash");
   assert (Option.is_none user.bio);
   assert (Option.is_none user.image);
   let missing_id = Domain.User.Id.of_int64_exn 999L in
@@ -350,6 +354,14 @@ let verify conn =
   let article_comments = or_fail article_comments in
   assert (Int.equal (List.length article_comments) 1);
   assert (String.equal (List.hd_exn article_comments).body "A comment");
+  let comment_id = Domain.Comment.Id.of_int64_exn (List.hd_exn article_comments).id in
+  let%bind wrong_owner_delete =
+    Adapter.run
+      ~conn
+      Realworld_sqlite.Comment_queries.delete_comment
+      { comment_id; article_id = 1L; author_id = Domain.User.Id.of_int64_exn 1L }
+  in
+  assert (Option.is_none (or_fail wrong_owner_delete));
   (* Check dialect-neutral query construction now; PostgreSQL execution is a later step. *)
   List.iter [ Dialect.Sqlite; Dialect.Postgresql ] ~f:(fun dialect ->
     Statement.sql_exn ~dialect ~input:1L joined_article_author |> ignore);
@@ -373,7 +385,7 @@ let verify conn =
     Adapter.run
       ~conn
       Realworld_sqlite.Article_queries.page
-      { filters; followed_by = None; page }
+      { filters; viewer_id = None; followed_by = None; page }
   in
   assert (Int.equal (List.length (or_fail filtered)) 1);
   let%bind filtered_count =
@@ -388,12 +400,27 @@ let verify conn =
       ~conn
       Realworld_sqlite.Article_queries.page
       { filters = Domain.Article.no_filters
+      ; viewer_id = Some (Domain.User.Id.of_int64_exn 2L)
       ; followed_by = Some (Domain.User.Id.of_int64_exn 2L)
       ; page
       }
   in
   assert (Int.equal (List.length (or_fail feed)) 1);
+  let stale_article_update : Realworld_sqlite.Article_queries.Update_article.t =
+    { id = 1L
+    ; author_id = Domain.User.Id.of_int64_exn 1L
+    ; slug = Domain.Article.Slug.of_string_exn "generated-schema"
+    ; title = "Stale update"
+    ; description = "A typed SQL integration test"
+    ; body = "Content survives schema upgrades."
+    ; now
+    }
+  in
   let%bind () = execute ~conn delete_article 1L in
+  let%bind stale_update =
+    Adapter.run ~conn Realworld_sqlite.Article_queries.update_article stale_article_update
+  in
+  assert (Option.is_none (or_fail stale_update));
   let%bind () = execute ~conn delete_article 2L in
   let%bind comments = Adapter.run ~conn all_comments () in
   let%bind favorites = Adapter.run ~conn all_favorites () in

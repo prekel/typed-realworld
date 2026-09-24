@@ -32,15 +32,15 @@ end
 
 module User : sig
   module Id : ID
+  module Email : STRING_VALUE
   module Username : STRING_VALUE
 
   type id = Id.t
 
   type t =
     { id : id
-    ; email : string
+    ; email : Email.t
     ; username : Username.t
-    ; password_hash : string
     ; bio : string option
     ; image : string option
     }

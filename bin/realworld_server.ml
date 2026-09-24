@@ -1,7 +1,37 @@
 open! Base
+open Opium.Std
 module Application = Realworld_application
 module Database = Realworld_sqlite.Database_sqlite_lwt
 module Jwt = Realworld_security.Jwt_hs256
+
+module Cors = struct
+  let headers =
+    [ "Access-Control-Allow-Origin", "*"
+    ; "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
+    ; "Access-Control-Allow-Headers", "Authorization, Content-Type"
+    ; "Access-Control-Max-Age", "86400"
+    ]
+  ;;
+
+  let add_headers response =
+    let headers =
+      List.fold headers ~init:(Response.headers response) ~f:(fun headers (name, value) ->
+        Cohttp.Header.replace headers name value)
+    in
+    { response with Response.headers }
+  ;;
+
+  let middleware =
+    let filter handler request =
+      match Request.meth request with
+      | `OPTIONS ->
+        Response.create ~code:`No_content ~headers:(Cohttp.Header.of_list headers) ()
+        |> Lwt.return
+      | _ -> handler request |> Lwt.map add_headers
+    in
+    Rock.Middleware.create ~name:"cors" ~filter
+  ;;
+end
 
 module Clock = struct
   let now () = Ptime_clock.now ()
@@ -49,6 +79,7 @@ let () =
     |> Http.Endpoint.Compiled.app
     |> fun routes ->
     Typed_endpoint_opium.mount routes Opium.Std.App.empty
+    |> Opium.Std.App.middleware Cors.middleware
     |> Opium.Std.App.port (port ())
     |> Opium.Std.App.run_command
 ;;

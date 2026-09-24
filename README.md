@@ -10,6 +10,10 @@ Backend полной спецификации RealWorld/Conduit на OCaml 5.5. 
 лента, фильтрация и pagination статей, теги, favorites и comments. Точный
 wire-contract проверяется закреплённым официальным набором Hurl.
 
+Сгенерированная OpenAPI 3.1 спецификация доступна по `/openapi.json`. Страница
+`/docs` ведёт на Swagger UI, Scalar, RapiDoc, Redoc и Stoplight Elements; все
+рендереры читают один и тот же runtime-документ.
+
 ## Быстрый старт
 
 Нужны opam, SQLite development headers и чистые worktree
@@ -72,15 +76,16 @@ revision указан в `UPSTREAM`. Дополнительные regression-с�
 - `src/domain` — значения и инварианты.
 - `src/application/*_service.ml` — use cases и transaction boundaries;
   `*_repository.mli` — порты persistence.
-- `src/infrastructure/sqlite/*_queries.ml` — operation-модули `typed-sql` с
-  вложенным `Input.t` и заранее скомпилированным `Statement.Portable` для
-  SELECT/INSERT/UPDATE/DELETE. `Statement.Dynamic` используется только для
-  batch-запросов с переменным числом значений `IN`; `*_repository_sqlite.ml` —
+- `src/infrastructure/sqlite/*_queries.ml` — корневые statements `typed-sql`;
+  отдельный модуль рядом со statement используется только для record input из
+  нескольких полей. `Statement.Dynamic` применяется для batch-запросов с
+  переменным числом значений `IN`; `*_repository_sqlite.ml` —
   SQLite-адаптеры application-портов; `database_sqlite_lwt.ml` — pool и
   транзакции. Lookup statements используют `LIMIT 1` и статическую
   cardinality-модель, а `RETURNING` с business invariant явно проверяется
   через `expect_one`.
 - `src/infrastructure/security` — scrypt и JWT HS256.
-- `src/http/*_controller.ml` — typed-endpoint DSL, DTO и auth context;
-  `app.ml` только компилирует группы endpoint.
+- `src/http/*_controller.ml` — typed-endpoint DSL, DTO, точные JSON Schema и
+  auth context; `app.ml` компилирует группы endpoint и монтирует сгенерированный
+  OpenAPI вместе со страницами документации.
 - `bin` — конфигурация, wiring service/repository, pool и lifecycle.

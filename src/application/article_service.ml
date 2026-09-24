@@ -114,6 +114,7 @@ struct
     | Error errors -> Lwt.return (Error (`Validation errors))
     | Ok article ->
       let base = slug_base article.title in
+      let now = Clock.now () in
       let rec attempt index =
         if index > 1000 then
           Lwt.return
@@ -130,7 +131,7 @@ struct
                    ~conn
                    ~author_id
                    ~slug:(candidate base index)
-                   ~now:(Clock.now ())
+                   ~now
                    article))
             (function
               | Error `Slug_taken -> attempt (index + 1)
@@ -144,22 +145,35 @@ struct
     match Validation.article_update changes with
     | Error errors -> Lwt.return (Error (`Validation errors))
     | Ok changes ->
-      let new_slug = Option.map changes.title ~f:slug_base in
-      Database.transaction
-        database
-        ~on_error:(fun error -> `Persistence error)
-        ~f:(fun ~conn ->
+      let slug_base = Option.map changes.title ~f:slug_base in
+      let now = Clock.now () in
+      let rec attempt index =
+        if index > 1000 then
+          Lwt.return
+            (Error
+               (`Persistence
+                   (Persistence_error.of_string "could not allocate article slug")))
+        else (
+          let new_slug = Option.map slug_base ~f:(fun base -> candidate base index) in
           let open Lwt.Let_syntax in
-          let%map updated =
-            Articles.update ~conn ~author_id ~slug ~new_slug ~now:(Clock.now ()) changes
+          let%bind updated =
+            Database.transaction
+              database
+              ~on_error:(fun error -> `Persistence error)
+              ~f:(fun ~conn ->
+                Articles.update ~conn ~author_id ~slug ~new_slug ~now changes)
           in
           match updated with
-          | Ok article -> Ok article
-          | Error `Forbidden -> Error `Forbidden
-          | Error `Not_found -> Error `Not_found
+          | Ok article -> Lwt.return (Ok article)
+          | Error `Slug_taken when Option.is_some slug_base -> attempt (index + 1)
           | Error `Slug_taken ->
-            Error (`Persistence (Persistence_error.of_string "article slug conflict"))
-          | Error (`Persistence error) -> Error (`Persistence error))
+            Lwt.return
+              (Error (`Persistence (Persistence_error.of_string "article slug conflict")))
+          | Error `Forbidden -> Lwt.return (Error `Forbidden)
+          | Error `Not_found -> Lwt.return (Error `Not_found)
+          | Error (`Persistence error) -> Lwt.return (Error (`Persistence error)))
+      in
+      attempt 1
   ;;
 
   let delete ~database ~author_id ~slug =
