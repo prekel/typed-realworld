@@ -1,5 +1,11 @@
+(library
+ (name realworld_server_support)
+ (modules access_log)
+ (libraries base unix uri yojson))
+
 (executable
  (name realworld_server)
+ (modules realworld_server frontend_page)
  (public_name typed-realworld-server)
  (libraries
   base
@@ -12,9 +18,15 @@
   realworld_application
   realworld_domain
   realworld_http
+  realworld_server_support
   realworld_sqlite
   realworld_security
   typed-endpoint-opium
   uri)
  (preprocess
   (pps ppx_let)))
+
+(test
+ (name access_log_test)
+ (modules access_log_test)
+ (libraries base realworld_server_support yojson))

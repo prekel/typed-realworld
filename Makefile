@@ -1,17 +1,17 @@
 all: build
 
 PACKAGES = ./typed-realworld.opam
-TYPED_ENDPOINT_VERSION = 0.1.0
-TYPED_SQL_VERSION = 0.3.1
-TYPED_ENDPOINT_DIR ?= ../typed-endpoint-v0.1.0
-TYPED_SQL_DIR ?= ../typed-sql-v0.3.1
+TYPED_ENDPOINT_VERSION = 0.1.1
+TYPED_SQL_VERSION = 0.3.2
+TYPED_ENDPOINT_DIR ?= ../typed-endpoint-v0.1.1
+TYPED_SQL_DIR ?= ../typed-sql-v0.3.2
 export NAME
 export DBMATE_BIN ?= $(CURDIR)/.tools/bin/dbmate
 export HURL_BIN ?= $(CURDIR)/.tools/bin/hurl
 
 .PHONY: create_switch
 create_switch:
-	opam switch create . 5.5.1 --no-install -y
+	opam switch create . 5.1.1 --no-install -y
 	opam install dune -y
 
 .PHONY: pins
@@ -102,8 +102,16 @@ schema-check:
 	bash scripts/schema.sh check
 
 .PHONY: server
-server:
+server: frontend-build
 	opam exec -- dune exec --root . bin/realworld_server.exe
+
+.PHONY: frontend-build
+frontend-build:
+	opam exec --switch frontend -- dune build --root frontend main.bc.js
+
+.PHONY: frontend-deps
+frontend-deps:
+	opam install --switch frontend bonsai.v0.17.0 js_of_ocaml-compiler.5.6.0 yojson dune.3.23.1 -y
 
 .PHONY: api-test
 api-test: build tools
