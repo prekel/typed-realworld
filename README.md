@@ -3,7 +3,6 @@
 Backend полной спецификации RealWorld/Conduit на OCaml 5.5. API работает под
 `/api`, использует Opium и runtime adapter `typed-endpoint`; persistence
 реализован через Caqti/SQLite и generated descriptors `typed-sql`.
-Минимальный браузерный клиент на Bonsai и js_of_ocaml доступен на `/`.
 
 Текущие направления развития описаны в [дорожной карте](doc/roadmap.md).
 
@@ -31,19 +30,16 @@ make server
 ```
 
 Сервер по умолчанию слушает `http://127.0.0.1:3000`: на `/` и `/app` он
-отдаёт клиент, на `/api` — API. Backend использует локальный switch OCaml
-5.5.1, frontend — отдельный switch Bonsai на OCaml 5.1.1. Для frontend выполни
-`opam switch create frontend 5.1.1 -y` и `make frontend-deps`. `make server`
-собирает JS в frontend switch и запускает сервер из backend switch. Клиент показывает статьи, позволяет
-зарегистрироваться, войти и опубликовать статью. Токен хранится только в памяти
-страницы. Сервер не применяет миграции самостоятельно.
+отдаёт HTML shell, `/app.js` — настроенный JS bundle, а `/api` — API. Для bundle
+можно задать `REALWORLD_FRONTEND_BUNDLE`; без доступного файла `/app.js` вернёт
+503. Сервер не собирает frontend и не применяет миграции самостоятельно.
 
 | Переменная | Значение по умолчанию |
 | --- | --- |
 | `REALWORLD_DATABASE_URL` | `sqlite3:realworld.sqlite3` |
 | `REALWORLD_PORT` | `3000` |
 | `REALWORLD_JWT_SECRET` | development secret с предупреждением в stderr |
-| `REALWORLD_FRONTEND_BUNDLE` | `frontend/_build/default/main.bc.js` |
+| `REALWORLD_FRONTEND_BUNDLE` | `frontend.bundle.js` |
 
 Для production обязательно задать `REALWORLD_JWT_SECRET`. JWT используют HS256
 и действуют 24 часа. `Authorization` имеет вид `Token <jwt>`.
