@@ -16,7 +16,7 @@ wire-contract проверяется закреплённым официальн
 
 ## Быстрый старт
 
-Нужны opam, SQLite development headers и чистые worktree
+Нужны opam, Node.js 22.18 или новее, SQLite development headers и чистые worktree
 `../typed-endpoint-v0.1.1` и `../typed-sql-v0.3.2`. Их можно создать
 командами `git -C ../typed-endpoint worktree add --detach ../typed-endpoint-v0.1.1 v0.1.1`
 и `git -C ../typed-sql worktree add --detach ../typed-sql-v0.3.2 v0.3.2`.
@@ -31,15 +31,17 @@ make server
 
 Сервер по умолчанию слушает `http://127.0.0.1:3000`: на `/` и `/app` он
 отдаёт HTML shell, `/app.js` — настроенный JS bundle, а `/api` — API. Для bundle
-можно задать `REALWORLD_FRONTEND_BUNDLE`; без доступного файла `/app.js` вернёт
-503. Сервер не собирает frontend и не применяет миграции самостоятельно.
+`make server` сначала собирает React/TypeScript frontend. Bundle можно задать
+через `REALWORLD_FRONTEND_BUNDLE`; без доступного файла `/app.js` вернёт 503.
+Для обновления сгенерированного API-клиента оставь backend запущенным и выполни
+`make frontend-types` в другом терминале. Сервер не применяет миграции самостоятельно.
 
 | Переменная | Значение по умолчанию |
 | --- | --- |
 | `REALWORLD_DATABASE_URL` | `sqlite3:realworld.sqlite3` |
 | `REALWORLD_PORT` | `3000` |
 | `REALWORLD_JWT_SECRET` | development secret с предупреждением в stderr |
-| `REALWORLD_FRONTEND_BUNDLE` | `frontend.bundle.js` |
+| `REALWORLD_FRONTEND_BUNDLE` | `frontend/dist/frontend.bundle.js` |
 
 Для production обязательно задать `REALWORLD_JWT_SECRET`. JWT используют HS256
 и действуют 24 часа. `Authorization` имеет вид `Token <jwt>`.
@@ -65,9 +67,13 @@ Email и username принимаются в ASCII, нормализуются к
 
 ```sh
 make test       # unit и миграционные SQLite integration tests
+make frontend-test # React component и generated-client tests
 make api-test   # временная БД, сервер, official RealWorld и project Hurl scenarios
 make check      # fmt, build, tests, Hurl, docs, package и schema check
 ```
+
+`make frontend-build` запускает TypeScript typecheck и собирает bundle; `make
+server` и `make api-test` также собирают frontend bundle.
 
 Официальные Hurl-сценарии сохранены в `test/hurl/official/`; их upstream
 revision указан в `UPSTREAM`. Дополнительные regression-сценарии проекта лежат

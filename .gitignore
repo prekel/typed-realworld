@@ -20,6 +20,8 @@ _opam/
 realworld.sqlite3
 realworld.sqlite3-shm
 realworld.sqlite3-wal
+frontend/node_modules/
+frontend/dist/
 
 # Editor state
 .merlin

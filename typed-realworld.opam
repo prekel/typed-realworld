@@ -28,8 +28,8 @@ depends: [
   "opium" {= "0.18.0"}
   "typed-endpoint" {= "0.1.1"}
   "typed-endpoint-opium" {= "0.1.1"}
-  "typed-sql" {= "0.3.2"}
-  "typed-sql-caqti-lwt" {= "0.3.2"}
+  "typed-sql" {= "0.3.3"}
+  "typed-sql-caqti-lwt" {= "0.3.3"}
   "ppx_fields_conv"
   "ppx_let" {>= "v0.17.1"}
   "ppx_deriving_yojson" {build}

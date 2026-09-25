@@ -7,6 +7,7 @@ let html =
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>RealWorld</title>
+    <link rel="icon" href="data:,">
     <style>
       :root { font-family: system-ui, sans-serif; color: #172033; background: #f5f7fb; }
       * { box-sizing: border-box; }

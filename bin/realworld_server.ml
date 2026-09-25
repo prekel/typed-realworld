@@ -114,7 +114,7 @@ let jwt_secret () =
 ;;
 
 let frontend_bundle () =
-  getenv_or_default "REALWORLD_FRONTEND_BUNDLE" "frontend.bundle.js"
+  getenv_or_default "REALWORLD_FRONTEND_BUNDLE" "frontend/dist/frontend.bundle.js"
 ;;
 
 let frontend_page _request = Opium.Std.respond' (`Html Frontend_page.html)
