@@ -2,7 +2,7 @@ all: build
 
 PACKAGES = ./typed-realworld.opam
 TYPED_ENDPOINT_VERSION = 0.1.1
-TYPED_SQL_VERSION = 0.3.3
+TYPED_SQL_VERSION = 0.3.4
 TYPED_ENDPOINT_DIR ?= ../typed-endpoint-v0.1.1
 TYPED_SQL_DIR ?= ../typed-sql
 export NAME
@@ -105,6 +105,10 @@ schema-check:
 server: frontend-build
 	opam exec -- dune exec --root . bin/realworld_server.exe
 
+.PHONY: server-postgres
+server-postgres: frontend-build
+	opam exec -- dune exec --root . bin/realworld_server_postgres.exe
+
 .PHONY: frontend-deps
 frontend-deps: frontend/node_modules/.package-lock.json
 
@@ -126,3 +130,7 @@ frontend-test: frontend-deps
 .PHONY: api-test
 api-test: build tools frontend-build
 	SERVER_BIN=$(CURDIR)/_build/default/bin/realworld_server.exe bash scripts/api-test.sh
+
+.PHONY: test-postgres
+test-postgres: build tools frontend-build
+	SERVER_BIN=$(CURDIR)/_build/default/bin/realworld_server_postgres.exe bash scripts/postgres-test.sh

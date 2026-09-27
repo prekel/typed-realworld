@@ -17,7 +17,7 @@
  (name typed-realworld)
  (synopsis "RealWorld backend built with typed-endpoint and typed-sql")
  (description
-  "A RealWorld/Conduit backend foundation with repository ports, versioned SQLite migrations, and generated typed SQL descriptors.")
+  "A RealWorld/Conduit backend with SQLite and PostgreSQL migrations and generated typed SQL descriptors.")
  (depends
   (ocaml (>= 5.1.1))
   base
@@ -31,13 +31,14 @@
   caqti
   caqti-lwt
   caqti-driver-sqlite3
+  caqti-driver-postgresql
   uri
   cohttp
   (opium (= 0.18.0))
   (typed-endpoint (= 0.1.1))
   (typed-endpoint-opium (= 0.1.1))
-  (typed-sql (= 0.3.3))
-  (typed-sql-caqti-lwt (= 0.3.3))
+  (typed-sql (= 0.3.4))
+  (typed-sql-caqti-lwt (= 0.3.4))
   ppx_fields_conv
   (ppx_let (>= v0.17.1))
   (ppx_deriving_yojson :build)
@@ -49,4 +50,4 @@
   (ocaml-lsp-server :with-dev-setup)
   (odoc :with-doc))
  (tags
-  (realworld conduit http api sql sqlite)))
+  (realworld conduit http api sql sqlite postgresql)))

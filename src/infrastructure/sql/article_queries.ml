@@ -144,16 +144,17 @@ let page =
     let viewer_id =
       params.expr (Db_type.option Db_type.int64) ~get:Page.viewer_id_value
     in
-    let limit = params.non_negative_int ~name:"limit" ~get:Page.limit in
-    let offset = params.non_negative_int ~name:"offset" ~get:Page.offset in
-    filtered ~author ~tag ~favorited_by ~followed_by
-    |> Query.inner_join Users.table ~on:(fun article user ->
-      Articles.author_id article =. Users.id user)
-    |> Query.order_by (fun (article, _) -> Articles.created_at article) `Desc
-    |> Query.order_by (fun (article, _) -> Articles.id article) `Desc
-    |> Query.limit_param limit
-    |> Query.offset_param offset
-    |> Query.select (read_projection ~viewer_id))
+    let page_limit = params.non_negative_int ~name:"limit" ~get:Page.limit in
+    let page_offset = params.non_negative_int ~name:"offset" ~get:Page.offset in
+    Query.(
+      filtered ~author ~tag ~favorited_by ~followed_by
+      |> inner_join Users.table ~on:(fun article user ->
+        Articles.author_id article =. Users.id user)
+      |> order_by (fun (article, _) -> Articles.created_at article) `Desc
+      |> order_by (fun (article, _) -> Articles.id article) `Desc
+      |> limit_param page_limit
+      |> offset_param page_offset
+      |> select (read_projection ~viewer_id)))
 ;;
 
 let%expect_test "article page SQL" =
@@ -298,45 +299,41 @@ let count =
     let followed_by =
       params.expr (Db_type.option Db_type.int64) ~get:Count.followed_by_value
     in
-    Query.Aggregate.(
-      from Articles.table
-      |> where_optional_param author ~f:(fun article author ->
-        Query.(
-          from Users.table
-          |> where (fun user ->
-            Users.id user
-            =. Articles.author_id article
-            &&. (Expr.to_nullable (Users.username user) =. author))
-          |> exists))
-      |> where_optional_param tag ~f:(fun article tag ->
-        Query.(
-          from Article_tags.table
-          |> inner_join Tags.table ~on:(fun article_tag tag_row ->
-            Article_tags.tag_id article_tag =. Tags.id tag_row)
-          |> where (fun (article_tag, tag_row) ->
-            Article_tags.article_id article_tag
-            =. Articles.id article
-            &&. (Expr.to_nullable (Tags.name tag_row) =. tag))
-          |> exists))
-      |> where_optional_param favorited_by ~f:(fun article favorited_by ->
-        Query.(
-          from Favorites.table
-          |> inner_join Users.table ~on:(fun favorite user ->
-            Favorites.user_id favorite =. Users.id user)
-          |> where (fun (favorite, user) ->
-            Favorites.article_id favorite
-            =. Articles.id article
-            &&. (Expr.to_nullable (Users.username user) =. favorited_by))
-          |> exists))
-      |> where_optional_param followed_by ~f:(fun article followed_by ->
-        Query.(
-          from Follows.table
-          |> where (fun follow ->
-            Expr.to_nullable (Follows.follower_id follow)
-            =. followed_by
-            &&. (Follows.followed_id follow =. Articles.author_id article))
-          |> exists))
-      |> Query.aggregate_one (fun _ -> Aggregate_projection.count_all)))
+    Query.(
+      Aggregate.from Articles.table
+      |> Aggregate.where_optional_param author ~f:(fun article author ->
+        from Users.table
+        |> where (fun user ->
+          Users.id user
+          =. Articles.author_id article
+          &&. (Expr.to_nullable (Users.username user) =. author))
+        |> exists)
+      |> Aggregate.where_optional_param tag ~f:(fun article tag ->
+        from Article_tags.table
+        |> inner_join Tags.table ~on:(fun article_tag tag_row ->
+          Article_tags.tag_id article_tag =. Tags.id tag_row)
+        |> where (fun (article_tag, tag_row) ->
+          Article_tags.article_id article_tag
+          =. Articles.id article
+          &&. (Expr.to_nullable (Tags.name tag_row) =. tag))
+        |> exists)
+      |> Aggregate.where_optional_param favorited_by ~f:(fun article favorited_by ->
+        from Favorites.table
+        |> inner_join Users.table ~on:(fun favorite user ->
+          Favorites.user_id favorite =. Users.id user)
+        |> where (fun (favorite, user) ->
+          Favorites.article_id favorite
+          =. Articles.id article
+          &&. (Expr.to_nullable (Users.username user) =. favorited_by))
+        |> exists)
+      |> Aggregate.where_optional_param followed_by ~f:(fun article followed_by ->
+        from Follows.table
+        |> where (fun follow ->
+          Expr.to_nullable (Follows.follower_id follow)
+          =. followed_by
+          &&. (Follows.followed_id follow =. Articles.author_id article))
+        |> exists)
+      |> aggregate_one (fun _ -> Aggregate_projection.count_all)))
 ;;
 
 let%expect_test "article count SQL" =
@@ -747,11 +744,10 @@ let%expect_test "delete article SQL" =
 let upsert_tag =
   Statement.Portable.expect_one_exn (fun params ->
     let name = params.column Tags.name_column ~get:Domain.Article.Tag.to_string in
-    let target = Insert.Conflict_target.column Tags.name_column in
     Insert.(
       into Tags.table
       |> set_expr Tags.name_column name
-      |> on_conflict target
+      |> on_conflict (Conflict_target.column Tags.name_column)
       |> do_update (fun ~existing:_ ~excluded ->
         Conflict_update.(empty |> set_expr Tags.name_column (Tags.name excluded)))
       |> returning Tags.projection))

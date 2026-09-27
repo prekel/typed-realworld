@@ -2,7 +2,8 @@
 
 Backend полной спецификации RealWorld/Conduit на OCaml 5.5. API работает под
 `/api`, использует Opium и runtime adapter `typed-endpoint`; persistence
-реализован через Caqti/SQLite и generated descriptors `typed-sql`.
+реализован через Caqti, SQLite или PostgreSQL, и generated descriptors
+`typed-sql`.
 
 Текущие направления развития описаны в [дорожной карте](doc/roadmap.md).
 
@@ -16,10 +17,10 @@ wire-contract проверяется закреплённым официальн
 
 ## Быстрый старт
 
-Нужны opam, Node.js 22.18 или новее, SQLite development headers и чистые worktree
-`../typed-endpoint-v0.1.1` и `../typed-sql-v0.3.2`. Их можно создать
-командами `git -C ../typed-endpoint worktree add --detach ../typed-endpoint-v0.1.1 v0.1.1`
-и `git -C ../typed-sql worktree add --detach ../typed-sql-v0.3.2 v0.3.2`.
+Нужны opam, Node.js 22.18 или новее, SQLite development headers, а для
+PostgreSQL — сервер 18 и `libpq-dev`. Нужны чистые worktree
+`../typed-endpoint-v0.1.1` и `../typed-sql` на соответствующих тегах `v0.1.1`
+и `v0.3.4`; Makefile использует эти соседние каталоги как локальные opam pins.
 
 ```sh
 make create_switch
@@ -28,6 +29,17 @@ make tools
 make migrate
 make server
 ```
+
+Для SQLite запускай `make server`. Для PostgreSQL создай базу и передай URL
+обоим командам:
+
+```sh
+REALWORLD_DATABASE_URL='postgresql://localhost/typed_realworld?sslmode=disable' make migrate
+REALWORLD_DATABASE_URL='postgresql://localhost/typed_realworld?sslmode=disable' make server-postgres
+```
+
+Бинарник PostgreSQL требует `REALWORLD_DATABASE_URL`; SQLite сохраняет прежний
+URL по умолчанию. Бинарники проверяют схему URL при старте.
 
 Сервер по умолчанию слушает `http://127.0.0.1:3000`: на `/` и `/app` он
 отдаёт HTML shell, `/app.js` — настроенный JS bundle, а `/api` — API. Для bundle
@@ -53,14 +65,18 @@ make migration NAME=add_index
 make schema
 make schema-check
 REALWORLD_DATABASE_URL=sqlite3:/tmp/realworld.sqlite3 make migrate
+REALWORLD_DATABASE_URL='postgresql://localhost/typed_realworld?sslmode=disable' make migrate
 ```
 
-SQL-миграции в `db/migrations/sqlite/` — источник структуры. `make schema`
+SQLite-миграции находятся в `db/migrations/sqlite/`, PostgreSQL-миграции — в
+`db/migrations/postgres/`. Команды `make migrate` и `make migration` выбирают
+набор по URL базы. `make schema`
 строит временную БД и обновляет `db/schema.json`; Dune генерирует descriptors
-только в `_build`. Уже применённые миграции не редактируются.
+только в `_build`. Снимок описывает общую структуру таблиц для обоих backend.
+Уже применённые миграции не редактируются.
 
 Email и username принимаются в ASCII, нормализуются к нижнему регистру и
-защищены SQLite `NOCASE` unique indexes. Конфликт slug разрешается как
+защищены case-insensitive unique indexes в каждой СУБД. Конфликт slug разрешается как
 `title`, `title-2`, `title-3`.
 
 ## Проверки
@@ -69,6 +85,7 @@ Email и username принимаются в ASCII, нормализуются к
 make test       # unit и миграционные SQLite integration tests
 make frontend-test # React component и generated-client tests
 make api-test   # временная БД, сервер, official RealWorld и project Hurl scenarios
+make test-postgres # PostgreSQL 18 кластер, repository integration и Hurl suite
 make check      # fmt, build, tests, Hurl, docs, package и schema check
 ```
 
@@ -85,12 +102,13 @@ revision указан в `UPSTREAM`. Дополнительные regression-с�
 - `src/domain` — значения и инварианты.
 - `src/application/*_service.ml` — use cases и transaction boundaries;
   `*_repository.mli` — порты persistence.
-- `src/infrastructure/sqlite/*_queries.ml` — корневые statements `typed-sql`;
+- `src/infrastructure/sql/*_queries.ml` — общие корневые statements `typed-sql`;
   отдельный модуль рядом со statement используется только для record input из
   нескольких полей. `Statement.Dynamic` применяется для batch-запросов с
-  переменным числом значений `IN`; `*_repository_sqlite.ml` —
-  SQLite-адаптеры application-портов; `database_sqlite_lwt.ml` — pool и
-  транзакции. Lookup statements используют `LIMIT 1` и статическую
+  переменным числом значений `IN`; `*_repository_sql.ml` реализуют application
+  ports общие для двух СУБД. `src/infrastructure/sqlite` и
+  `src/infrastructure/postgres` содержат backend-specific pool setup. Lookup
+  statements используют `LIMIT 1` и статическую
   cardinality-модель, а `RETURNING` с business invariant явно проверяется
   через `expect_one`.
 - `src/infrastructure/security` — scrypt и JWT HS256.

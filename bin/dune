@@ -1,30 +1,45 @@
 (library
  (name realworld_server_support)
- (modules access_log)
- (libraries base unix uri yojson))
+ (modules access_log frontend_page server_main)
+ (libraries
+  base
+  caqti-lwt
+  lwt.unix
+  realworld_sql
+  realworld_security
+  opium
+  ptime.clock.os
+  mirage-crypto-rng.unix
+  realworld_application
+  realworld_domain
+  realworld_http
+  typed-endpoint-opium
+  unix
+  uri
+  yojson)
+ (preprocess
+  (pps ppx_let)))
 
 (executable
  (name realworld_server)
- (modules realworld_server frontend_page)
+ (modules realworld_server)
  (public_name typed-realworld-server)
  (libraries
   base
   caqti-driver-sqlite3
-  cohttp
-  lwt.unix
-  ptime.clock.os
-  mirage-crypto-rng.unix
-  opium
-  realworld_application
-  realworld_domain
-  realworld_http
   realworld_server_support
   realworld_sqlite
-  realworld_security
-  typed-endpoint-opium
-  uri)
- (preprocess
-  (pps ppx_let)))
+  uri))
+
+(executable
+ (name realworld_server_postgres)
+ (modules realworld_server_postgres)
+ (public_name typed-realworld-server-postgres)
+ (libraries
+  base
+  caqti-driver-postgresql
+  realworld_postgres
+  realworld_server_support))
 
 (test
  (name access_log_test)

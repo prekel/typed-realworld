@@ -6,10 +6,11 @@ server=${SERVER_BIN:?SERVER_BIN is required}
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/typed-realworld-api.XXXXXX")
 port=${REALWORLD_TEST_PORT:-3100}
 base="http://127.0.0.1:${port}"
+database_url=${REALWORLD_TEST_DATABASE_URL:-"sqlite3:$tmp/realworld.sqlite3"}
 trap '[[ -n ${server_pid:-} ]] && kill "$server_pid" 2>/dev/null || true; rm -rf -- "$tmp"' EXIT
 
-REALWORLD_DATABASE_URL="sqlite3:$tmp/realworld.sqlite3" bash "$root/scripts/dbmate.sh" up
-REALWORLD_DATABASE_URL="sqlite3:$tmp/realworld.sqlite3" \
+REALWORLD_DATABASE_URL="$database_url" bash "$root/scripts/dbmate.sh" up
+REALWORLD_DATABASE_URL="$database_url" \
 REALWORLD_PORT="$port" \
 REALWORLD_JWT_SECRET="hurl-contract-secret" \
 "$server" >"$tmp/server.log" 2>&1 &

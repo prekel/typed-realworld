@@ -5,21 +5,21 @@
 Приложение реализует полный HTTP-контракт RealWorld: регистрацию и login,
 current user, profiles и follows, articles, feed, tags, favorites и comments.
 Контроллеры собраны через `typed-endpoint`, application services задают
-transaction boundaries, SQLite repositories используют `typed-sql`, а схема
+transaction boundaries, repositories используют `typed-sql`, а схема
 изменяется только версионированными dbmate migrations.
 
-`make check` проверяет форматирование, сборку, unit и SQLite integration tests,
-170 Hurl requests, документацию, opam package и соответствие `db/schema.json`
-миграциям.
+Для SQLite и PostgreSQL есть отдельные реализации подключения, миграции и
+серверные бинарники. React/TypeScript frontend использует клиент, сгенерированный
+из OpenAPI. `make check` проверяет форматирование, сборку, тесты, Hurl suite,
+документацию, opam package и соответствие `db/schema.json` SQLite-миграциям.
 
-Следующие этапы не расширяют RealWorld wire contract. Они устраняют оставшиеся
-полные сканы, усиливают persistence invariants, сокращают число и объём
-запросов и делают внутренние границы безопаснее.
+Этапы ниже не расширяют RealWorld wire contract. Они описывают устранение полных
+сканов, усиление persistence invariants, сокращение числа и объёма запросов и
+укрепление внутренних границ.
 
-## Достаточность текущего typed-sql
+## Возможности текущего typed-sql
 
-Для этапов 1–7 достаточно `typed-sql 0.3.1`. Уже доступны необходимые
-возможности:
+В `typed-sql 0.3.4` доступны необходимые возможности:
 
 - `JOIN`, correlated `EXISTS`, aggregates, scalar subqueries и applicative
   projections для read models;
@@ -32,19 +32,13 @@ transaction boundaries, SQLite repositories используют `typed-sql`, а
   меняет SQL shape;
 - структурированная классификация constraint violations в Caqti adapter.
 
-Некоторые доказательства aggregates в `0.3.1` выполняются compiler-ом при
-создании statement, а не системой типов OCaml. Это не блокирует реализацию
-read models: некорректный statement всё равно не запускается, но ошибка пока не
-является compile-time type error.
-
-Только этап 8 зависит от будущего `Query.aggregate_one`. Он заменит
-`Query.select_exactly_one` настоящим compile-time proof для ungrouped
-aggregate. `Expr.coalesce`, `Query.select_one` и `Query.default_if_empty` для
-текущего RealWorld API не требуются.
+`Query.aggregate_one` даёт proof для ungrouped aggregate на уровне типов. Count
+statement статей использует этот combinator; правило для таких запросов
+зафиксировано в `AGENTS.md`.
 
 ## 1. Убрать полные сканы profiles и follows
 
-**Статус: выполнено.**
+- [x] Этап выполнен.
 
 Раньше получение одного профиля читало все строки `users` и `follows`.
 `follow` и `unfollow` после изменения связи снова читали всю таблицу follows,
@@ -52,13 +46,13 @@ aggregate. `Expr.coalesce`, `Query.select_one` и `Query.default_if_empty` дл�
 
 Реализовано:
 
-- добавить `profile_by_username`, выбирающий одного пользователя;
-- вычислять `following` через correlated `EXISTS` только для текущего viewer;
-- после успешного `follow` строить response с `following = true`, после
+- [x] Добавить `profile_by_username`, выбирающий одного пользователя;
+- [x] Вычислять `following` через correlated `EXISTS` только для текущего viewer;
+- [x] После успешного `follow` строить response с `following = true`, после
   `unfollow` — с `following = false`, не перечитывая все связи;
-- удалить `User_queries.all_rows`, `User_queries.all_follows` и ставшие
+- [x] Удалить `User_queries.all_rows`, `User_queries.all_follows` и ставшие
   ненужными helpers из `repository_support.ml`;
-- сохранить корректное поведение optional auth: без viewer поле `following`
+- [x] Сохранить корректное поведение optional auth: без viewer поле `following`
   равно `false`.
 
 Готово, когда profile/follow/unfollow не содержат запросов без ограничения по
@@ -67,21 +61,21 @@ tests проверяют оба значения `following`.
 
 ## 2. Включить ownership в mutation SQL
 
-**Статус: выполнено.**
+- [x] Этап выполнен.
 
 Проверка владельца и mutation выполняются в одной транзакции. Mutation также
 повторяет authorization invariant в своём `WHERE`.
 
 Реализовано:
 
-- обновлять статью с `WHERE article.id = ? AND article.author_id = ?`;
-- удалять статью с тем же ownership scope;
-- удалять комментарий с ограничением по comment ID, article ID и author ID;
-- использовать `RETURNING` и `expect_optional`, чтобы отличать выполненный
+- [x] Обновлять статью с `WHERE article.id = ? AND article.author_id = ?`;
+- [x] Удалять статью с тем же ownership scope;
+- [x] Удалять комментарий с ограничением по comment ID, article ID и author ID;
+- [x] Использовать `RETURNING` и `expect_optional`, чтобы отличать выполненный
   mutation от исчезнувшей или изменившейся строки;
-- сохранить предварительный lookup только там, где он нужен для различения
+- [x] Сохранить предварительный lookup только там, где он нужен для различения
   `Not_found` и `Forbidden`;
-- проверить rollback всей операции, включая изменения тегов.
+- [x] Проверить rollback всей операции, включая изменения тегов.
 
 Готово, когда ни один ownership-sensitive mutation нельзя выполнить SQL-запросом
 только по публичному идентификатору и integration tests проверяют чужого
@@ -89,7 +83,7 @@ tests проверяют оба значения `following`.
 
 ## 3. Сохранить структурированные persistence errors
 
-**Статус: выполнено.**
+- [x] Этап выполнен.
 
 Раньше `Repository_support.run` сразу превращал adapter error в строковый
 `Persistence_error`, а создание статьи распознавало конфликт slug поиском слова
@@ -98,16 +92,16 @@ tests проверяют оба значения `following`.
 
 Реализовано:
 
-- классифицировать `Typed_sql_caqti_lwt.Constraint_violation` до преобразования
+- [x] Классифицировать `Typed_sql_caqti_lwt.Constraint_violation` до преобразования
   в публичный `Persistence_error`;
-- для статьи переводить только unique violation операции записи slug в
+- [x] Для статьи переводить только unique violation операции записи slug в
   `Slug_taken`;
-- после unique conflict пользователя перечитывать email и username и
+- [x] После unique conflict пользователя перечитывать email и username и
   определять `Email_taken`/`Username_taken` по данным, не по тексту сообщения
   драйвера;
-- одинаково обрабатывать conflict при create и update;
-- не возвращать внутреннее сообщение SQLite через HTTP;
-- добавить integration tests для case-insensitive конфликтов и конфликтов,
+- [x] Одинаково обрабатывать conflict при create и update;
+- [x] Не возвращать внутреннее сообщение БД через HTTP;
+- [x] Добавить integration tests для case-insensitive конфликтов и конфликтов,
   возникающих после предварительного lookup.
 
 Для этого не требуется более детальная ошибка от `typed-sql`: текущего
@@ -116,7 +110,7 @@ constraint kind достаточно, а конкретный business conflict 
 
 ## 4. Сократить article read model
 
-**Статус: выполнено.**
+- [x] Этап выполнен.
 
 Раньше страница статей после основного SELECT отдельно загружала авторов,
 подписки, tags, article-tags и все favorite rows выбранных статей. Это не N+1,
@@ -125,21 +119,19 @@ constraint kind достаточно, а конкретный business conflict 
 
 Реализовано:
 
-- присоединять автора к основному article query;
-- вычислять `following` и `favorited` через correlated `EXISTS`;
-- вычислять `favorites_count` в SQL, не загружая идентификаторы всех
+- [x] Присоединять автора к основному article query;
+- [x] Вычислять `following` и `favorited` через correlated `EXISTS`;
+- [x] Вычислять `favorites_count` в SQL, не загружая идентификаторы всех
   пользователей, добавивших статью в favorites;
-- объединить `article_tags` и `tags` одним batch JOIN-запросом, сохранив
+- [x] Объединить `article_tags` и `tags` одним batch JOIN-запросом, сохранив
   `position`;
-- оставить `Statement.Dynamic` только для batch `IN article_ids`;
-- использовать один и тот же read-model projection для list, feed и find, если
+- [x] Оставить `Statement.Dynamic` только для batch `IN article_ids`;
+- [x] Использовать один и тот же read-model projection для list, feed и find, если
   это не ухудшает план SQLite;
-- проверить `EXPLAIN QUERY PLAN` и добавить индекс только при подтверждённом
+- [x] Проверить `EXPLAIN QUERY PLAN` и добавить индекс только при подтверждённом
   полном скане на реальном запросе.
 
-В `typed-sql 0.3.1` count можно выразить текущим aggregate/scalar-subquery API
-или отдельным grouped batch query. Будущий `Query.aggregate_one` сделает proof
-нагляднее, но для этой оптимизации не обязателен.
+Count statement использует `Query.aggregate_one` из `typed-sql 0.3.4`.
 
 Готово, когда число запросов не зависит от числа статей, favorites не
 материализуются в OCaml, а list/feed/find возвращают прежний wire contract.
@@ -150,7 +142,7 @@ constraint kind достаточно, а конкретный business conflict 
 
 ## 5. Покрыть application services изолированными тестами
 
-**Статус: выполнено.**
+- [x] Этап выполнен.
 
 Hurl хорошо закрепляет HTTP contract, но не показывает точную границу
 transaction и не позволяет удобно инъецировать редкие ошибки repository.
@@ -159,41 +151,41 @@ transaction и не позволяет удобно инъецировать р�
 Добавлены fake `Database`, repositories, `Clock` и `Password_hasher`, которые
 проверяют:
 
-- validation останавливает use case до открытия transaction;
-- фиксированный `Clock.now` передаётся create/update statements;
-- slug retry завершается успехом и имеет ограничение числа попыток;
-- ошибка синхронизации тегов откатывает создание или обновление статьи;
-- repository errors переводятся в правильные application errors;
-- новый password хешируется только после успешной валидации;
-- login не различает отсутствующий email и неверный пароль публичной ошибкой;
-- follow-self, forbidden update/delete и отсутствующие сущности не смешиваются.
+- [x] Validation останавливает use case до открытия transaction;
+- [x] Фиксированный `Clock.now` передаётся create/update statements;
+- [x] Slug retry завершается успехом и имеет ограничение числа попыток;
+- [x] Ошибка синхронизации тегов откатывает создание или обновление статьи;
+- [x] Repository errors переводятся в правильные application errors;
+- [x] Новый password хешируется только после успешной валидации;
+- [x] Login не различает отсутствующий email и неверный пароль публичной ошибкой;
+- [x] Follow-self, forbidden update/delete и отсутствующие сущности не смешиваются.
 
 Тесты должны проверять observable calls и transaction outcome, а не повторять
 реализацию service построчно.
 
 ## 6. Публиковать и проверять сгенерированный OpenAPI
 
-**Статус: выполнено.**
+- [x] Этап выполнен.
 
-`typed-endpoint` уже хранит полный compiled endpoint graph и умеет строить
-OpenAPI, но сервер пока монтирует только runtime routes.
+`typed-endpoint` хранит compiled endpoint graph; из него сервер строит OpenAPI
+и монтирует runtime routes.
 
 Реализовано:
 
-- задать `Openapi.Config` для RealWorld API;
-- отдавать compiled document по `/openapi.json`;
-- добавить `/docs` и пять renderer routes, читающих тот же document;
-- сохранить canonical OpenAPI snapshot или семантический golden test;
-- проверять operation IDs, security alternatives optional auth, path/query
+- [x] Задать `Openapi.Config` для RealWorld API;
+- [x] Отдавать compiled document по `/openapi.json`;
+- [x] Добавить `/docs` и пять renderer routes, читающих тот же document;
+- [x] Сохранить canonical OpenAPI snapshot или семантический golden test;
+- [x] Проверять operation IDs, security alternatives optional auth, path/query
   codecs, request bodies, response statuses и component schemas;
-- добавить Hurl smoke test для `/openapi.json`.
+- [x] Добавить Hurl smoke test для `/openapi.json`.
 
 OpenAPI должен генерироваться из тех же declarations, которые монтируются в
 Opium; отдельный вручную поддерживаемый YAML не нужен.
 
 ## 7. Отделить credentials от публичного пользователя
 
-**Статус: выполнено.**
+- [x] Этап выполнен.
 
 Раньше `Domain.User.t` содержал `password_hash`, хотя обычные use cases и HTTP
 responses не должны его видеть. Это увеличивало риск случайной сериализации или
@@ -201,37 +193,87 @@ responses не должны его видеть. Это увеличивало �
 
 Реализовано:
 
-- удалить `password_hash` из обычного `Domain.User.t`;
-- ввести repository-only `User_repository.credentials`, содержащий user и
+- [x] Удалить `password_hash` из обычного `Domain.User.t`;
+- [x] Ввести repository-only `User_repository.credentials`, содержащий user и
   password hash;
-- возвращать credentials только из lookup, используемого login;
-- оставить register/update repositories принимающими hash как входное
+- [x] Возвращать credentials только из lookup, используемого login;
+- [x] Оставить register/update repositories принимающими hash как входное
   значение, но возвращающими безопасный `User.t`;
-- `Domain.User.Email.t` с нормализацией и валидацией на границе не позволяет
+- [x] `Domain.User.Email.t` с нормализацией и валидацией на границе не позволяет
   repository принимать произвольную строку email;
-- проверить, что DTO, errors и debug output не содержат password/hash.
+- [x] Проверить, что DTO, errors и debug output не содержат password/hash.
 
 Готово, когда controller и большинство application services не могут получить
 password hash через тип обычного пользователя.
 
 ## 8. Перейти на compile-time proof ungrouped aggregate
 
-После выпуска соответствующей версии `typed-sql` заменить count statement в
-`article_queries.ml`:
+- [x] Этап выполнен.
 
-- использовать `Query.aggregate_one` вместо `Query.select_exactly_one`;
-- обновить inline SQL expect test, если rendering изменится;
-- зафиксировать в `AGENTS.md`, что новый combinator обязателен для доказуемых
+- [x] Использовать `Query.aggregate_one` вместо `Query.select_exactly_one` в
+  count statement `article_queries.ml`;
+- [x] Обновить inline SQL expect test, если rendering изменится;
+- [x] Зафиксировать в `AGENTS.md`, что новый combinator обязателен для доказуемых
   ungrouped aggregates;
-- оставить `select_exactly_one` только для форм, которые новый API ещё не
+- [x] Оставить `select_exactly_one` только для форм, которые новый API ещё не
   выражает, с явным объяснением причины рядом с statement.
 
-Этот этап зависит от будущего API `typed-sql`. Он не блокирует этапы 1–7 и не
-меняет SQL или поведение приложения сам по себе.
+`Query.aggregate_one` уже доступен в `typed-sql 0.3.4`. В текущих SQL-модулях
+`select_exactly_one` больше не используется.
+
+## 9. Проверять SQLite и PostgreSQL перед релизом
+
+- [ ] Завершить этап.
+
+- [ ] Добавить `make test-postgres` в итоговую команду проверки перед релизом;
+- [ ] сравнивать таблицы, ограничения и индексы, созданные миграциями SQLite и
+  PostgreSQL, с учётом различий диалектов;
+- [ ] завершать проверку ошибкой при расхождении схем или падении тестов любой
+  из двух СУБД.
+
+Готово, когда одна итоговая команда проверяет оба backend и обнаруживает
+расхождение их схем до релиза.
+
+## 10. Довести frontend до полного RealWorld
+
+- [ ] Завершить этап.
+
+- [ ] Добавить ленту статей и пагинацию;
+- [ ] добавить страницу статьи с просмотром, созданием и удалением комментариев;
+- [ ] добавить профили, избранные статьи и подписки;
+- [ ] добавить редактирование и удаление статей, настройки пользователя.
+
+Готово, когда все перечисленные сценарии доступны из интерфейса и используют
+сгенерированный из OpenAPI клиент.
+
+## 11. Сделать генерацию TypeScript-клиента воспроизводимой
+
+- [ ] Завершить этап.
+
+- [ ] Получать OpenAPI из compiled endpoint graph без запуска HTTP-сервера;
+- [ ] генерировать TypeScript-клиент из локального документа;
+- [ ] проверять, что сохранённый сгенерированный код соответствует текущему
+  OpenAPI, и показывать расхождение в локальной проверке.
+
+Готово, когда `make frontend-types` не требует запущенного backend, а изменение
+контракта не проходит проверку с устаревшим клиентом.
+
+## 12. Проверить PostgreSQL под нагрузкой
+
+- [ ] Завершить этап.
+
+- [ ] Проверить конкурентную регистрацию пользователей и создание статей с
+  конфликтующими slug, включая итоговые данные и публичные ошибки;
+- [ ] на наполненной БД изучить планы list/feed запросов через
+  `EXPLAIN (ANALYZE, BUFFERS)`;
+- [ ] менять запросы и индексы только при выявленной проблеме в планах.
+
+Готово, когда конкурентные сценарии проходят без нарушения инвариантов, а
+планы list/feed запросов проверены на данных представительного объёма.
 
 ## История выполнения
 
-Пункты 1–7 выполнены следующими срезами:
+Пункты 1–7 и переход на `Query.aggregate_one` выполнены следующими срезами:
 
 1. profiles/follows без полных сканов и удаление мёртвых `all_*` statements;
 2. scoped mutations вместе со структурированной классификацией конфликтов;

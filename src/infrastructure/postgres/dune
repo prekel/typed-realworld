@@ -1,7 +1,7 @@
 (library
- (name realworld_sqlite)
- (public_name typed-realworld.sqlite)
- (modules database_sqlite_lwt)
+ (name realworld_postgres)
+ (public_name typed-realworld.postgres)
+ (modules database_postgres_lwt)
  (libraries
   caqti
   caqti-lwt

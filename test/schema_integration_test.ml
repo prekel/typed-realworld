@@ -2,7 +2,7 @@ open! Base
 open Typed_sql
 open Infix
 open Lwt.Let_syntax
-module Schema = Realworld_sqlite.Schema
+module Schema = Realworld_sql.Schema
 module Users = Schema.Users
 module Articles = Schema.Articles
 module Tags = Schema.Tags
@@ -248,7 +248,7 @@ let seed conn = execute ~conn insert_user { id = 1L; email; username = "before-u
 let check_user conn =
   let email = Domain.User.Email.of_string_exn email in
   let%bind result =
-    Adapter.run ~conn Realworld_sqlite.User_queries.credentials_by_email email
+    Adapter.run ~conn Realworld_sql.User_queries.credentials_by_email email
   in
   let credentials = or_fail result |> Option.value_exn in
   let user = credentials.user in
@@ -258,7 +258,7 @@ let check_user conn =
   assert (Option.is_none user.bio);
   assert (Option.is_none user.image);
   let missing_id = Domain.User.Id.of_int64_exn 999L in
-  let%map missing = Adapter.run ~conn Realworld_sqlite.User_queries.by_id missing_id in
+  let%map missing = Adapter.run ~conn Realworld_sql.User_queries.by_id missing_id in
   assert (Option.is_none (or_fail missing))
 ;;
 
@@ -326,11 +326,11 @@ let verify conn =
   let%bind () = execute ~conn follow { follower_id = 2L; followed_id = 1L } in
   let tag = Domain.Article.Tag.of_string_exn "ocaml" in
   let%bind inserted_tag =
-    Adapter.run ~conn Realworld_sqlite.Article_queries.upsert_tag tag
+    Adapter.run ~conn Realworld_sql.Article_queries.upsert_tag tag
   in
   let inserted_tag = or_fail inserted_tag in
   let%bind existing_tag =
-    Adapter.run ~conn Realworld_sqlite.Article_queries.upsert_tag tag
+    Adapter.run ~conn Realworld_sql.Article_queries.upsert_tag tag
   in
   let existing_tag = or_fail existing_tag in
   assert (Int64.equal inserted_tag.id existing_tag.id);
@@ -349,7 +349,7 @@ let verify conn =
       { article_id = 2L; body = "A comment on another article"; now }
   in
   let%bind article_comments =
-    Adapter.run ~conn Realworld_sqlite.Comment_queries.by_article 1L
+    Adapter.run ~conn Realworld_sql.Comment_queries.by_article 1L
   in
   let article_comments = or_fail article_comments in
   assert (Int.equal (List.length article_comments) 1);
@@ -358,7 +358,7 @@ let verify conn =
   let%bind wrong_owner_delete =
     Adapter.run
       ~conn
-      Realworld_sqlite.Comment_queries.delete_comment
+      Realworld_sql.Comment_queries.delete_comment
       { comment_id; article_id = 1L; author_id = Domain.User.Id.of_int64_exn 1L }
   in
   assert (Option.is_none (or_fail wrong_owner_delete));
@@ -384,21 +384,18 @@ let verify conn =
   let%bind filtered =
     Adapter.run
       ~conn
-      Realworld_sqlite.Article_queries.page
+      Realworld_sql.Article_queries.page
       { filters; viewer_id = None; followed_by = None; page }
   in
   assert (Int.equal (List.length (or_fail filtered)) 1);
   let%bind filtered_count =
-    Adapter.run
-      ~conn
-      Realworld_sqlite.Article_queries.count
-      { filters; followed_by = None }
+    Adapter.run ~conn Realworld_sql.Article_queries.count { filters; followed_by = None }
   in
   assert (Int64.equal (or_fail filtered_count) 1L);
   let%bind feed =
     Adapter.run
       ~conn
-      Realworld_sqlite.Article_queries.page
+      Realworld_sql.Article_queries.page
       { filters = Domain.Article.no_filters
       ; viewer_id = Some (Domain.User.Id.of_int64_exn 2L)
       ; followed_by = Some (Domain.User.Id.of_int64_exn 2L)
@@ -406,7 +403,7 @@ let verify conn =
       }
   in
   assert (Int.equal (List.length (or_fail feed)) 1);
-  let stale_article_update : Realworld_sqlite.Article_queries.Update_article.t =
+  let stale_article_update : Realworld_sql.Article_queries.Update_article.t =
     { id = 1L
     ; author_id = Domain.User.Id.of_int64_exn 1L
     ; slug = Domain.Article.Slug.of_string_exn "generated-schema"
@@ -418,7 +415,7 @@ let verify conn =
   in
   let%bind () = execute ~conn delete_article 1L in
   let%bind stale_update =
-    Adapter.run ~conn Realworld_sqlite.Article_queries.update_article stale_article_update
+    Adapter.run ~conn Realworld_sql.Article_queries.update_article stale_article_update
   in
   assert (Option.is_none (or_fail stale_update));
   let%bind () = execute ~conn delete_article 2L in

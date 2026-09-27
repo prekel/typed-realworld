@@ -31,6 +31,39 @@ let run_unit ~conn statement input =
   Result.map result ~f:(fun _ -> ())
 ;;
 
+let direct sql =
+  Caqti.Template.Request.create
+    Caqti.Template.Request.Direct
+    Caqti.Template.Request_type.Infix.(
+      Caqti.Template.Row_type.unit -->. Caqti.Template.Row_type.unit)
+    (fun _ -> Caqti.Template.Query.parse sql)
+;;
+
+let savepoint = direct "SAVEPOINT realworld_unique_mutation"
+let rollback_to_savepoint = direct "ROLLBACK TO SAVEPOINT realworld_unique_mutation"
+let release_savepoint = direct "RELEASE SAVEPOINT realworld_unique_mutation"
+
+let with_unique_savepoint ~conn ~f =
+  let module Connection = (val conn : Caqti_lwt.CONNECTION) in
+  let%bind started = Connection.exec savepoint () in
+  match started with
+  | Error error -> Lwt.return (Error (Adapter.Caqti error))
+  | Ok () ->
+    let%bind result = f () in
+    let%bind recovered =
+      match result with
+      | Ok _ -> Lwt.return (Ok ())
+      | Error _ -> Connection.exec rollback_to_savepoint ()
+    in
+    (match recovered with
+     | Error error -> Lwt.return (Error (Adapter.Caqti error))
+     | Ok () ->
+       let%map released = Connection.exec release_savepoint () in
+       (match released with
+        | Error error -> Error (Adapter.Caqti error)
+        | Ok () -> result))
+;;
+
 let profile_of_user ~viewer_id ~follows (user : Domain.User.t) =
   let following =
     Option.value_map viewer_id ~default:false ~f:(fun viewer_id ->

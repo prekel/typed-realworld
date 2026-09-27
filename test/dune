@@ -37,6 +37,7 @@
   lwt.unix
   ptime
   realworld_sqlite
+  realworld_sql
   realworld_domain
   typed-sql
   typed-sql-caqti-lwt
@@ -49,12 +50,16 @@
  (modules repository_integration_test)
  (libraries
   base
+  caqti-lwt
+  caqti-driver-postgresql
   caqti-driver-sqlite3
   lwt.unix
   ptime
   realworld_application
   realworld_domain
+  realworld_postgres
   realworld_sqlite
+  realworld_sql
   uri)
  (preprocess
   (pps ppx_let)))

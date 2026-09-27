@@ -73,8 +73,16 @@
   вычислений и immutable data по умолчанию.
 - Основной тип модуля называй `t`, сигнатуру `S`, функтор `Make`.
 - Публичные контракты и odoc-комментарии размещай в `.mli`.
-- SELECT записывай `Query.(from ... |> ... |> select ...)`; `select` ставь
-  последним. DML оформляй аналогично через локальное открытие builder.
+- SELECT записывай через одно локальное открытие `Query.(...)`; `select` ставь
+  последним. Для aggregate builder внутри этого открытия используй
+  `Aggregate.from` и `Aggregate.where_optional_param`, для вложенных SELECT —
+  обычные `from`, `where` и `exists`, а в конце — `aggregate_one`. Не используй
+  квалифицированные обращения к функциям `Query` и не выноси подзапросы в
+  отдельные функции только ради сокращения числа локальных открытий. Если
+  локальное открытие перекрывает имя параметра (например, `limit` или `offset`),
+  переименуй параметр. DML оформляй через `Insert.(...)`, `Update.(...)` или
+  `Delete.(...)`, без квалифицированных вызовов функций builder. Вложенные
+  модули, например `Conflict_target`, используй внутри того же открытия.
 - Каждый statement объявляй корневым `snake_case` значением query-модуля и
   создавай через `Statement.Portable` при инициализации модуля. Отдельный
   модуль создавай только для нового record-типа input с несколькими полями:
@@ -86,7 +94,9 @@
   форму SQL, например число элементов `IN`. Optional scalar filters выражай
   nullable parameters, а небольшой конечный набор форм — `Statement.choose`.
 - `query_one` и `query_one_exn` используй только когда `Cardinality.exactly_one`
-  доказана DSL через `Query.select_exactly_one`. `Query.limit_one` доказывает
+  доказана DSL: для ungrouped aggregate обязательно используй `aggregate_one`,
+  а `select_exactly_one` оставляй для форм, которые он не выражает, с
+  объяснением рядом со statement. `limit_one` доказывает
   только ноль или одну строку и требует `query_optional`. PK, `UNIQUE` и
   бизнес-инварианты не являются статическим proof; для них, а также DML
   `RETURNING`, явно выбирай `expect_one` или `expect_optional`.

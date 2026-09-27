@@ -41,7 +41,10 @@ let classify_unique ~conn ?except_id ~email ~username adapter_error =
 
 let create ~conn ~email ~username ~password_hash =
   let input : User_queries.Create_user.t = { email; username; password_hash } in
-  let%bind inserted = run_raw ~conn User_queries.create_user input in
+  let%bind inserted =
+    with_unique_savepoint ~conn ~f:(fun () ->
+      run_raw ~conn User_queries.create_user input)
+  in
   match inserted with
   | Ok user -> Lwt.return (Ok user)
   | Error error when constraint_is_unique error ->
@@ -60,7 +63,10 @@ let update ~conn ~id (changes : Application.User_repository.changes) =
     let bio = Domain.Patch.apply changes.bio ~current:current.bio in
     let image = Domain.Patch.apply changes.image ~current:current.image in
     let input : User_queries.Update_user.t = { id; email; username; bio; image } in
-    let%bind updated = run_raw ~conn User_queries.update_user input in
+    let%bind updated =
+      with_unique_savepoint ~conn ~f:(fun () ->
+        run_raw ~conn User_queries.update_user input)
+    in
     (match updated with
      | Error error when constraint_is_unique error ->
        classify_unique ~conn ~except_id:id ~email ~username error

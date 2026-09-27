@@ -2,11 +2,11 @@
 opam-version: "2.0"
 synopsis: "RealWorld backend built with typed-endpoint and typed-sql"
 description:
-  "A RealWorld/Conduit backend foundation with repository ports, versioned SQLite migrations, and generated typed SQL descriptors."
+  "A RealWorld/Conduit backend with SQLite and PostgreSQL migrations and generated typed SQL descriptors."
 maintainer: ["Vladislav Prekel"]
 authors: ["Vladislav Prekel"]
 license: "MIT"
-tags: ["realworld" "conduit" "http" "api" "sql" "sqlite"]
+tags: ["realworld" "conduit" "http" "api" "sql" "sqlite" "postgresql"]
 homepage: "https://github.com/prekel/typed-realworld"
 bug-reports: "https://github.com/prekel/typed-realworld/issues"
 depends: [
@@ -23,13 +23,14 @@ depends: [
   "caqti"
   "caqti-lwt"
   "caqti-driver-sqlite3"
+  "caqti-driver-postgresql"
   "uri"
   "cohttp"
   "opium" {= "0.18.0"}
   "typed-endpoint" {= "0.1.1"}
   "typed-endpoint-opium" {= "0.1.1"}
-  "typed-sql" {= "0.3.3"}
-  "typed-sql-caqti-lwt" {= "0.3.3"}
+  "typed-sql" {= "0.3.4"}
+  "typed-sql-caqti-lwt" {= "0.3.4"}
   "ppx_fields_conv"
   "ppx_let" {>= "v0.17.1"}
   "ppx_deriving_yojson" {build}

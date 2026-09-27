@@ -16,12 +16,13 @@ fi
 export REALWORLD_DATABASE_URL=${REALWORLD_DATABASE_URL:-sqlite3:realworld.sqlite3}
 export DBMATE_STRICT=true
 case "$REALWORLD_DATABASE_URL" in
-  sqlite:*|sqlite3:*) ;;
-  *) printf 'Only SQLite migrations are implemented; PostgreSQL support is planned.\n' >&2; exit 1 ;;
+  sqlite:*|sqlite3:*) driver=sqlite; migrations_dir=sqlite ;;
+  postgresql:*) driver=postgres; migrations_dir=postgres ;;
+  *) printf 'Expected a SQLite or PostgreSQL database URL.\n' >&2; exit 1 ;;
 esac
 # A single configuration source shared with the application. Do not implicitly
 # load .env or let DBMATE_* variables redirect the schema history or dialect.
 cd -- "$project_root"
-exec "$binary" --env-file /dev/null --env REALWORLD_DATABASE_URL --driver sqlite \
-  --migrations-dir "$project_root/db/migrations/sqlite" \
+exec "$binary" --env-file /dev/null --env REALWORLD_DATABASE_URL --driver "$driver" \
+  --migrations-dir "$project_root/db/migrations/$migrations_dir" \
   --migrations-table schema_migrations --no-dump-schema "$@"
