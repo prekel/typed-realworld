@@ -92,6 +92,26 @@ let assert_property schemas component property =
   assert (not (Yojson.Safe.equal value `Null))
 ;;
 
+let assert_nullable schema =
+  let open Yojson.Safe.Util in
+  let types = schema |> member "type" |> to_list in
+  assert (List.equal Yojson.Safe.equal types [ `String "string"; `String "null" ])
+;;
+
+let assert_optional properties field =
+  let open Yojson.Safe.Util in
+  let required = properties |> member "required" |> to_list in
+  assert (
+    not
+      (List.exists required ~f:(fun name ->
+         String.equal (Yojson.Safe.Util.to_string name) field)))
+;;
+
+let assert_no_extra_properties schema =
+  let open Yojson.Safe.Util in
+  assert (schema |> member "additionalProperties" |> to_bool |> not)
+;;
+
 let assert_response paths path_name meth status =
   let open Yojson.Safe.Util in
   let response =
@@ -153,6 +173,63 @@ let () =
     ~f:(fun name -> assert (not (Yojson.Safe.equal (schemas |> member name) `Null)));
   assert_property schemas "UserResponse" "user";
   assert_property schemas "ArticlesResponse" "articlesCount";
+  let registration =
+    schemas |> member "RegistrationRequest" |> member "properties" |> member "user"
+  in
+  let registration_properties = registration |> member "properties" in
+  assert_no_extra_properties registration;
+  assert (
+    String.equal
+      (registration_properties |> member "email" |> member "format" |> to_string)
+      "email");
+  assert (
+    Int.equal
+      (registration_properties |> member "password" |> member "minLength" |> to_int)
+      1);
+  let user_properties =
+    schemas
+    |> member "UserResponse"
+    |> member "properties"
+    |> member "user"
+    |> member "properties"
+  in
+  assert_nullable (user_properties |> member "bio");
+  let profile_properties =
+    schemas
+    |> member "ProfileResponse"
+    |> member "properties"
+    |> member "profile"
+    |> member "properties"
+  in
+  assert_nullable (profile_properties |> member "image");
+  let update_user =
+    schemas |> member "UserUpdateRequest" |> member "properties" |> member "user"
+  in
+  let update_user_properties = update_user |> member "properties" in
+  assert_no_extra_properties update_user;
+  assert_optional update_user "bio";
+  assert_nullable (update_user_properties |> member "bio");
+  assert_optional update_user "email";
+  assert (
+    String.equal
+      (update_user_properties |> member "email" |> member "type" |> to_string)
+      "string");
+  let update_article =
+    schemas |> member "ArticleUpdateRequest" |> member "properties" |> member "article"
+  in
+  assert_optional update_article "tagList";
+  assert (
+    String.equal
+      (update_article
+       |> member "properties"
+       |> member "tagList"
+       |> member "type"
+       |> to_string)
+      "array");
+  let errors_schema =
+    schemas |> member "Errors" |> member "properties" |> member "errors"
+  in
+  assert (String.equal (errors_schema |> member "type" |> to_string) "object");
   assert (
     String.equal (schemas |> member "CommentId" |> member "format" |> to_string) "int64");
   assert (Int.equal (schemas |> member "CommentId" |> member "minimum" |> to_int) 1);

@@ -23,9 +23,7 @@ let read_projection ~viewer_id (article, author) =
         Expr.to_nullable (Follows.follower_id follow)
         =. viewer_id
         &&. (Follows.followed_id follow =. Users.id author))
-      |> limit_one
-      |> select_scalar Follows.followed_id)
-    |> Expr.scalar_subquery
+      |> exists_expr)
   in
   let favorited =
     Query.(
@@ -34,9 +32,7 @@ let read_projection ~viewer_id (article, author) =
         Expr.to_nullable (Favorites.user_id favorite)
         =. viewer_id
         &&. (Favorites.article_id favorite =. Articles.id article))
-      |> limit_one
-      |> select_scalar Favorites.user_id)
-    |> Expr.scalar_subquery
+      |> exists_expr)
   in
   let favorites_count =
     Query.(
@@ -62,14 +58,14 @@ let read_projection ~viewer_id (article, author) =
     ; tag_list = []
     ; created_at = article.created_at
     ; updated_at = article.updated_at
-    ; favorited = Option.is_some favorited
+    ; favorited
     ; favorites_count = Option.value favorites_count ~default:0L |> Int64.to_int_exn
     ; author =
         Domain.Profile.
           { username = Domain.User.Username.of_string_exn username
           ; bio
           ; image
-          ; following = Option.is_some following
+          ; following
           }
     }
 ;;
@@ -173,28 +169,26 @@ let%expect_test "article page SQL" =
       t1."username",
       t1."bio",
       t1."image",
-      (
+      (EXISTS (
         SELECT
-          t2."followed_id"
+          1
         FROM "follows" AS t2
         WHERE
           (
             (t2."follower_id" = ?1)
             AND (t2."followed_id" = t1."id")
           )
-        LIMIT 1
-      ),
-      (
+      )),
+      (EXISTS (
         SELECT
-          t2."user_id"
+          1
         FROM "favorites" AS t2
         WHERE
           (
             (t2."user_id" = ?1)
             AND (t2."article_id" = t0."id")
           )
-        LIMIT 1
-      ),
+      )),
       (
         SELECT
           COUNT(*)
@@ -507,28 +501,26 @@ let%expect_test "read article by slug SQL" =
       t1."username",
       t1."bio",
       t1."image",
-      (
+      (EXISTS (
         SELECT
-          t2."followed_id"
+          1
         FROM "follows" AS t2
         WHERE
           (
             (t2."follower_id" = ?1)
             AND (t2."followed_id" = t1."id")
           )
-        LIMIT 1
-      ),
-      (
+      )),
+      (EXISTS (
         SELECT
-          t2."user_id"
+          1
         FROM "favorites" AS t2
         WHERE
           (
             (t2."user_id" = ?1)
             AND (t2."article_id" = t0."id")
           )
-        LIMIT 1
-      ),
+      )),
       (
         SELECT
           COUNT(*)

@@ -35,15 +35,15 @@
   uri
   cohttp
   (opium (= 0.18.0))
-  (typed-endpoint (= 0.1.1))
-  (typed-endpoint-opium (= 0.1.1))
-  (typed-sql (= 0.3.4))
-  (typed-sql-caqti-lwt (= 0.3.4))
+  (typed-endpoint (= 0.2.0))
+  (typed-endpoint-opium (= 0.2.0))
+  (typed-sql (= 0.3.5))
+  (typed-sql-caqti-lwt (= 0.3.5))
   ppx_fields_conv
   (ppx_let (>= v0.17.1))
   (ppx_deriving_yojson :build)
-  (ppx_deriving_jsonschema (>= 0.0.8))
-  (typed-endpoint-testing (and (= 0.1.1) :with-test))
+  (typed-endpoint-ppx (and (= 0.2.0) :build))
+  (typed-endpoint-testing (and (= 0.2.0) :with-test))
   (jsonschema :with-test)
   (ppx_expect :with-test)
   (ocamlformat (and (= 0.29.0) :with-dev-setup))

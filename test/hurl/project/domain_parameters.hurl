@@ -23,7 +23,7 @@ HTTP 400
 [Asserts]
 jsonpath "$.errors.offset[0]" == "is invalid"
 
-# Repeated scalar query parameters are rejected by typed-endpoint 0.1.0.
+# Repeated scalar query parameters are rejected by typed-endpoint 0.2.0.
 GET {{host}}/api/articles?limit=1&limit=2
 HTTP 400
 [Asserts]

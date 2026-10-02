@@ -1,9 +1,9 @@
 all: build
 
 PACKAGES = ./typed-realworld.opam
-TYPED_ENDPOINT_VERSION = 0.1.1
-TYPED_SQL_VERSION = 0.3.4
-TYPED_ENDPOINT_DIR ?= ../typed-endpoint-v0.1.1
+TYPED_ENDPOINT_VERSION = 0.2.0
+TYPED_SQL_VERSION = 0.3.5
+TYPED_ENDPOINT_DIR ?= ../typed-endpoint
 TYPED_SQL_DIR ?= ../typed-sql
 export NAME
 export DBMATE_BIN ?= $(CURDIR)/.tools/bin/dbmate
@@ -19,6 +19,7 @@ pins:
 	opam pin add --kind=path typed-endpoint.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_DIR) -yn
 	opam pin add --kind=path typed-endpoint-opium.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_DIR) -yn
 	opam pin add --kind=path typed-endpoint-testing.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_DIR) -yn
+	opam pin add --kind=path typed-endpoint-ppx.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_DIR) -yn
 	opam pin add --kind=path typed-sql.$(TYPED_SQL_VERSION) $(TYPED_SQL_DIR) -yn
 	opam pin add --kind=path typed-sql-caqti-lwt.$(TYPED_SQL_VERSION) $(TYPED_SQL_DIR) -yn
 
@@ -34,8 +35,6 @@ deps: pins metadata
 
 .PHONY: deps_all
 deps_all: pins metadata
-	# typed-endpoint-testing omits jsonschema from its published dependency metadata.
-	opam install jsonschema -y
 	opam install --deps-only --with-test --with-doc --with-dev-setup $(PACKAGES) -y
 
 .PHONY: build

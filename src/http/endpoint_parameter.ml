@@ -9,8 +9,13 @@ let entity_id
       ~description
       ()
   =
+  let schema : id Json_schema.t =
+    Json_schema.Deriver.type_schema Json_schema.Deriver.Integer
+    |> Json_schema.Deriver.with_minimum_int 1
+    |> Json_schema.Deriver.with_format "int64"
+  in
   Parameter.v
-    ~schema:(Json_schema.integer_exn ~format:`Int64 ~minimum:1 ())
+    ~schema
     ~schema_name
     ~description
     ~of_string:(fun value ->
@@ -26,8 +31,12 @@ let string_value
       ~description
       ()
   =
+  let schema : value Json_schema.t =
+    Json_schema.Deriver.type_schema Json_schema.Deriver.String
+    |> Json_schema.Deriver.with_string_lengths ~minimum:1
+  in
   Parameter.v
-    ~schema:(Json_schema.string_exn ~min_length:1 ())
+    ~schema
     ~schema_name
     ~description
     ~of_string:(fun raw -> Value.of_string raw |> Result.of_option ~error:"invalid value")
@@ -41,8 +50,12 @@ let page_value
       ~description
       ()
   =
+  let schema : value Json_schema.t =
+    Json_schema.Deriver.type_schema Json_schema.Deriver.Integer
+    |> Json_schema.Deriver.with_minimum_int 0
+  in
   Parameter.v
-    ~schema:(Json_schema.integer_exn ~minimum:0 ())
+    ~schema
     ~schema_name
     ~description
     ~of_string:(fun raw ->

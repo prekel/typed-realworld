@@ -35,19 +35,24 @@ struct
           <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
           <|> case `Conflict (Response.json (module Dto.Error_response))
           <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
-    ==> fun created invalid conflict unavailable_case context registration ->
-    let database = Contexts.Public.database context in
-    let issue = Contexts.Public.issue context in
-    let%bind result = Users.register ~database registration in
-    match result with
-    | Ok user ->
-      respond created (Dto.User_response.make ~token:(issue ~user_id:user.id) user)
-    | Error (`Validation fields) -> respond invalid (error fields)
-    | Error `Email_taken ->
-      respond conflict (error [ "email", [ "has already been taken" ] ])
-    | Error `Username_taken ->
-      respond conflict (error [ "username", [ "has already been taken" ] ])
-    | Error (`Persistence _) -> respond unavailable_case unavailable
+    ==> fun created invalid conflict unavailable_case context body ->
+    let%bind registration = Request_body.read body in
+    match registration with
+    | Error body_error -> Request_body.reject body_error
+    | Ok registration ->
+      let registration = Dto.Registration_request.to_domain registration in
+      let database = Contexts.Public.database context in
+      let issue = Contexts.Public.issue context in
+      let%bind result = Users.register ~database registration in
+      (match result with
+       | Ok user ->
+         respond created (Dto.User_response.make ~token:(issue ~user_id:user.id) user)
+       | Error (`Validation fields) -> respond invalid (error fields)
+       | Error `Email_taken ->
+         respond conflict (error [ "email", [ "has already been taken" ] ])
+       | Error `Username_taken ->
+         respond conflict (error [ "username", [ "has already been taken" ] ])
+       | Error (`Persistence _) -> respond unavailable_case unavailable)
   ;;
 
   let login =
@@ -59,26 +64,27 @@ struct
           <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
           <|> case `Unauthorized (Response.json (module Dto.Error_response))
           <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
-    ==> fun ok invalid unauthorized unavailable_case context credentials ->
-    let database = Contexts.Public.database context in
-    let issue = Contexts.Public.issue context in
-    if String.is_empty (String.strip credentials.Dto.Login_request.email) then
-      respond invalid (error [ "email", [ "can't be blank" ] ])
-    else if String.is_empty (String.strip credentials.Dto.Login_request.password) then
-      respond invalid (error [ "password", [ "can't be blank" ] ])
-    else (
-      let%bind result =
-        Users.login
-          ~database
-          ~email:credentials.Dto.Login_request.email
-          ~password:credentials.Dto.Login_request.password
-      in
-      match result with
-      | Ok user ->
-        respond ok (Dto.User_response.make ~token:(issue ~user_id:user.id) user)
-      | Error `Invalid_credentials ->
-        respond unauthorized (error [ "credentials", [ "invalid" ] ])
-      | Error (`Persistence _) -> respond unavailable_case unavailable)
+    ==> fun ok invalid unauthorized unavailable_case context body ->
+    let%bind credentials = Request_body.read body in
+    match credentials with
+    | Error body_error -> Request_body.reject body_error
+    | Ok credentials ->
+      let email = Dto.Login_request.email credentials in
+      let password = Dto.Login_request.password credentials in
+      let database = Contexts.Public.database context in
+      let issue = Contexts.Public.issue context in
+      if String.is_empty (String.strip email) then
+        respond invalid (error [ "email", [ "can't be blank" ] ])
+      else if String.is_empty (String.strip password) then
+        respond invalid (error [ "password", [ "can't be blank" ] ])
+      else (
+        let%bind result = Users.login ~database ~email ~password in
+        match result with
+        | Ok user ->
+          respond ok (Dto.User_response.make ~token:(issue ~user_id:user.id) user)
+        | Error `Invalid_credentials ->
+          respond unauthorized (error [ "credentials", [ "invalid" ] ])
+        | Error (`Persistence _) -> respond unavailable_case unavailable)
   ;;
 
   let current =
@@ -110,25 +116,29 @@ struct
           <|> case `Conflict (Response.json (module Dto.Error_response))
           <|> case `Unauthorized (Response.json (module Dto.Error_response))
           <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
-    ==> fun ok invalid conflict unauthorized unavailable_case context request ->
-    let database = Contexts.Authenticated.database context in
-    let issue = Contexts.Authenticated.issue context in
-    let user_id = Contexts.Authenticated.user_id context in
+    ==> fun ok invalid conflict unauthorized unavailable_case context body ->
+    let%bind request = Request_body.read body in
     match request with
-    | Dto.User_update_request.Invalid (field, message) ->
-      respond invalid (error [ field, [ message ] ])
-    | Valid changes ->
-      let%bind result = Users.update ~database ~user_id changes in
-      (match result with
-       | Ok user ->
-         respond ok (Dto.User_response.make ~token:(issue ~user_id:user.id) user)
-       | Error (`Validation fields) -> respond invalid (error fields)
-       | Error `Email_taken ->
-         respond conflict (error [ "email", [ "has already been taken" ] ])
-       | Error `Username_taken ->
-         respond conflict (error [ "username", [ "has already been taken" ] ])
-       | Error `Unauthorized -> respond unauthorized (error [ "token", [ "is invalid" ] ])
-       | Error (`Persistence _) -> respond unavailable_case unavailable)
+    | Error body_error -> Request_body.reject body_error
+    | Ok request ->
+      (match Dto.User_update_request.to_domain request with
+       | Error (field, message) -> respond invalid (error [ field, [ message ] ])
+       | Ok changes ->
+         let database = Contexts.Authenticated.database context in
+         let issue = Contexts.Authenticated.issue context in
+         let user_id = Contexts.Authenticated.user_id context in
+         let%bind result = Users.update ~database ~user_id changes in
+         (match result with
+          | Ok user ->
+            respond ok (Dto.User_response.make ~token:(issue ~user_id:user.id) user)
+          | Error (`Validation fields) -> respond invalid (error fields)
+          | Error `Email_taken ->
+            respond conflict (error [ "email", [ "has already been taken" ] ])
+          | Error `Username_taken ->
+            respond conflict (error [ "username", [ "has already been taken" ] ])
+          | Error `Unauthorized ->
+            respond unauthorized (error [ "token", [ "is invalid" ] ])
+          | Error (`Persistence _) -> respond unavailable_case unavailable))
   ;;
 
   let profile =

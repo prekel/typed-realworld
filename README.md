@@ -19,8 +19,8 @@ wire-contract проверяется закреплённым официальн
 
 Нужны opam, Node.js 22.18 или новее, SQLite development headers, а для
 PostgreSQL — сервер 18 и `libpq-dev`. Нужны чистые worktree
-`../typed-endpoint-v0.1.1` и `../typed-sql` на соответствующих тегах `v0.1.1`
-и `v0.3.4`; Makefile использует эти соседние каталоги как локальные opam pins.
+`../typed-endpoint` и `../typed-sql` на соответствующих тегах `v0.2.0`
+и `v0.3.5`; Makefile использует эти соседние каталоги как локальные opam pins.
 
 ```sh
 make create_switch

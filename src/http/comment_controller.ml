@@ -63,15 +63,20 @@ struct
           <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
           <|> case `Not_found (Response.json (module Dto.Error_response))
           <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
-    ==> fun slug created invalid missing unavailable_case context body ->
-    let database = Contexts.Authenticated.database context in
-    let user_id = Contexts.Authenticated.user_id context in
-    let%bind result = Comments.create ~database ~author_id:user_id ~slug ~body in
-    match result with
-    | Ok comment -> respond created (Dto.Comment_response.make comment)
-    | Error (`Validation fields) -> respond invalid (error fields)
-    | Error `Article_not_found -> respond missing (not_found "article")
-    | Error (`Persistence _) -> respond unavailable_case unavailable
+    ==> fun slug created invalid missing unavailable_case context request_body ->
+    let%bind body = Request_body.read request_body in
+    match body with
+    | Error body_error -> Request_body.reject body_error
+    | Ok body ->
+      let body = Dto.Comment_create_request.body body in
+      let database = Contexts.Authenticated.database context in
+      let user_id = Contexts.Authenticated.user_id context in
+      let%bind result = Comments.create ~database ~author_id:user_id ~slug ~body in
+      (match result with
+       | Ok comment -> respond created (Dto.Comment_response.make comment)
+       | Error (`Validation fields) -> respond invalid (error fields)
+       | Error `Article_not_found -> respond missing (not_found "article")
+       | Error (`Persistence _) -> respond unavailable_case unavailable)
   ;;
 
   let delete_comment =

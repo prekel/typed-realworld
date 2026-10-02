@@ -134,14 +134,19 @@ struct
          (case `Created (Response.json (module Dto.Article_response))
           <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
           <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
-    ==> fun created invalid unavailable_case context article ->
-    let database = Contexts.Authenticated.database context in
-    let user_id = Contexts.Authenticated.user_id context in
-    let%bind result = Articles.create ~database ~author_id:user_id article in
-    match result with
-    | Ok article -> respond created (Dto.Article_response.make article)
-    | Error (`Validation fields) -> respond invalid (error fields)
-    | Error (`Persistence _) -> respond unavailable_case unavailable
+    ==> fun created invalid unavailable_case context body ->
+    let%bind article = Request_body.read body in
+    match article with
+    | Error body_error -> Request_body.reject body_error
+    | Ok article ->
+      let article = Dto.Article_create_request.to_domain article in
+      let database = Contexts.Authenticated.database context in
+      let user_id = Contexts.Authenticated.user_id context in
+      let%bind result = Articles.create ~database ~author_id:user_id article in
+      (match result with
+       | Ok article -> respond created (Dto.Article_response.make article)
+       | Error (`Validation fields) -> respond invalid (error fields)
+       | Error (`Persistence _) -> respond unavailable_case unavailable)
   ;;
 
   let update =
@@ -154,20 +159,23 @@ struct
           <|> case `Not_found (Response.json (module Dto.Error_response))
           <|> case `Forbidden (Response.json (module Dto.Error_response))
           <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
-    ==> fun slug ok invalid missing forbidden_case unavailable_case context request ->
-    let database = Contexts.Authenticated.database context in
-    let user_id = Contexts.Authenticated.user_id context in
+    ==> fun slug ok invalid missing forbidden_case unavailable_case context body ->
+    let%bind request = Request_body.read body in
     match request with
-    | Dto.Article_update_request.Invalid_tag_list ->
-      respond invalid (error [ "tagList", [ "must be an array" ] ])
-    | Valid changes ->
-      let%bind result = Articles.update ~database ~author_id:user_id ~slug changes in
-      (match result with
-       | Ok article -> respond ok (Dto.Article_response.make article)
-       | Error (`Validation fields) -> respond invalid (error fields)
-       | Error `Not_found -> respond missing (not_found "article")
-       | Error `Forbidden -> respond forbidden_case (forbidden "article")
-       | Error (`Persistence _) -> respond unavailable_case unavailable)
+    | Error body_error -> Request_body.reject body_error
+    | Ok request ->
+      (match Dto.Article_update_request.to_domain request with
+       | Error () -> respond invalid (error [ "tagList", [ "must be an array" ] ])
+       | Ok changes ->
+         let database = Contexts.Authenticated.database context in
+         let user_id = Contexts.Authenticated.user_id context in
+         let%bind result = Articles.update ~database ~author_id:user_id ~slug changes in
+         (match result with
+          | Ok article -> respond ok (Dto.Article_response.make article)
+          | Error (`Validation fields) -> respond invalid (error fields)
+          | Error `Not_found -> respond missing (not_found "article")
+          | Error `Forbidden -> respond forbidden_case (forbidden "article")
+          | Error (`Persistence _) -> respond unavailable_case unavailable))
   ;;
 
   let delete_article =

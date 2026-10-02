@@ -19,7 +19,7 @@ transaction boundaries, repositories используют `typed-sql`, а схе
 
 ## Возможности текущего typed-sql
 
-В `typed-sql 0.3.4` доступны необходимые возможности:
+В `typed-sql 0.3.5` доступны необходимые возможности:
 
 - `JOIN`, correlated `EXISTS`, aggregates, scalar subqueries и applicative
   projections для read models;
@@ -30,11 +30,16 @@ transaction boundaries, repositories используют `typed-sql`, а схе
 - target-specific `ON CONFLICT`, `DO UPDATE` и `DO NOTHING`;
 - `Statement.Dynamic` для batch `IN`, где число идентификаторов действительно
   меняет SQL shape;
+- `Query.exists_expr` для boolean projection без nullable scalar subquery;
+- типизированный `Values` как источник строк для `FROM` и `JOIN`;
+- `Insert.from_select` для вставки результата совместимого `SELECT`;
 - структурированная классификация constraint violations в Caqti adapter.
 
 `Query.aggregate_one` даёт proof для ungrouped aggregate на уровне типов. Count
-statement статей использует этот combinator; правило для таких запросов
-зафиксировано в `AGENTS.md`.
+statement статей использует этот combinator. Article read model применяет
+`Query.exists_expr` для `following` и `favorited`, получая ненулевые SQL
+boolean-значения. Правила для aggregate и query statements зафиксированы в
+`AGENTS.md`.
 
 ## 1. Убрать полные сканы profiles и follows
 
@@ -131,7 +136,7 @@ constraint kind достаточно, а конкретный business conflict 
 - [x] Проверить `EXPLAIN QUERY PLAN` и добавить индекс только при подтверждённом
   полном скане на реальном запросе.
 
-Count statement использует `Query.aggregate_one` из `typed-sql 0.3.4`.
+Count statement использует `Query.aggregate_one`.
 
 Готово, когда число запросов не зависит от числа статей, favorites не
 материализуются в OCaml, а list/feed/find возвращают прежний wire contract.
@@ -218,7 +223,7 @@ password hash через тип обычного пользователя.
 - [x] Оставить `select_exactly_one` только для форм, которые новый API ещё не
   выражает, с явным объяснением причины рядом с statement.
 
-`Query.aggregate_one` уже доступен в `typed-sql 0.3.4`. В текущих SQL-модулях
+`Query.aggregate_one` уже доступен в `typed-sql 0.3.5`. В текущих SQL-модулях
 `select_exactly_one` больше не используется.
 
 ## 9. Проверять SQLite и PostgreSQL перед релизом
