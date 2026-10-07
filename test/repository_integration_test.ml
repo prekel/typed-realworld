@@ -210,6 +210,12 @@ module Make (Database : Database_runtime) = struct
             assert (Int.equal page.count 1);
             assert (Int.equal (List.length page.articles) 1)
           | Error error -> fail_persistence error);
+         let%bind empty_comments =
+           Comments.list ~database ~viewer_id:None ~slug:alice_article.slug
+         in
+         (match empty_comments with
+          | Ok comments -> assert (List.is_empty comments)
+          | Error _ -> Stdlib.failwith "empty comment list failed");
          let%bind comment =
            Comments.create
              ~database

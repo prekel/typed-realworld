@@ -5,7 +5,8 @@ Backend полной спецификации RealWorld/Conduit на OCaml 5.5. 
 реализован через Caqti, SQLite или PostgreSQL, и generated descriptors
 `typed-sql`.
 
-Текущие направления развития описаны в [дорожной карте](doc/roadmap.md).
+Текущие направления развития описаны в [дорожной карте](doc/roadmap.md), порядок
+работы со схемой — в [руководстве по миграциям](doc/migrations.md).
 
 Поддержаны регистрация и login, current user, profiles/follow, публикация,
 лента, фильтрация и pagination статей, теги, favorites и comments. Точный
@@ -18,9 +19,10 @@ wire-contract проверяется закреплённым официальн
 ## Быстрый старт
 
 Нужны opam, Node.js 22.18 или новее, SQLite development headers, а для
-PostgreSQL — сервер 18 и `libpq-dev`. Нужны чистые worktree
-`../typed-endpoint` и `../typed-sql` на соответствующих тегах `v0.2.0`
-и `v0.3.5`; Makefile использует эти соседние каталоги как локальные opam pins.
+PostgreSQL — сервер 18 и `libpq-dev`. Рядом с проектом должны быть локальные
+Git-репозитории `../typed-endpoint` и `../typed-sql` с тегами `v0.2.0` и
+`v0.4.5`. Пути можно переопределить через `TYPED_ENDPOINT_DIR` и
+`TYPED_SQL_DIR`; `make deps_all` закрепляет именно указанные теги.
 
 ```sh
 make create_switch
@@ -70,10 +72,9 @@ REALWORLD_DATABASE_URL='postgresql://localhost/typed_realworld?sslmode=disable' 
 
 SQLite-миграции находятся в `db/migrations/sqlite/`, PostgreSQL-миграции — в
 `db/migrations/postgres/`. Команды `make migrate` и `make migration` выбирают
-набор по URL базы. `make schema`
-строит временную БД и обновляет `db/schema.json`; Dune генерирует descriptors
-только в `_build`. Снимок описывает общую структуру таблиц для обоих backend.
-Уже применённые миграции не редактируются.
+набор по URL базы. `make schema` строит временную SQLite-БД и обновляет
+`db/schema.json`; Dune генерирует descriptors только в `_build`. PostgreSQL
+проверяется отдельным integration suite. Уже применённые миграции не редактируются.
 
 Email и username принимаются в ASCII, нормализуются к нижнему регистру и
 защищены case-insensitive unique indexes в каждой СУБД. Конфликт slug разрешается как
@@ -89,8 +90,9 @@ make test-postgres # PostgreSQL 18 кластер, repository integration и Hur
 make check      # fmt, build, tests, Hurl, docs, package и schema check
 ```
 
-`make frontend-build` запускает TypeScript typecheck и собирает bundle; `make
-server` и `make api-test` также собирают frontend bundle.
+`make check` включает SQLite-проверки; PostgreSQL запускается отдельно командой
+`make test-postgres`. `make frontend-build` запускает TypeScript typecheck и
+собирает bundle; `make server` и `make api-test` тоже собирают frontend bundle.
 
 Официальные Hurl-сценарии сохранены в `test/hurl/official/`; их upstream
 revision указан в `UPSTREAM`. Дополнительные regression-сценарии проекта лежат
@@ -102,11 +104,12 @@ revision указан в `UPSTREAM`. Дополнительные regression-с�
 - `src/domain` — значения и инварианты.
 - `src/application/*_service.ml` — use cases и transaction boundaries;
   `*_repository.mli` — порты persistence.
-- `src/infrastructure/sql/*_queries.ml` — общие корневые statements `typed-sql`;
-  отдельный модуль рядом со statement используется только для record input из
-  нескольких полей. `Statement.Dynamic` применяется для batch-запросов с
-  переменным числом значений `IN`; `*_repository_sql.ml` реализуют application
-  ports общие для двух СУБД. `src/infrastructure/sqlite` и
+- `src/infrastructure/sql/*_queries.ml` — statements `typed-sql`; отдельный
+  модуль рядом со statement используется только для record input из нескольких
+  полей. `Statement.Dynamic` применяется, когда число значений меняет SQL
+  shape, например для SQLite `IN`. `Statement.choose_dialect` выбирает вариант
+  batch lookup пользователей для PostgreSQL и SQLite. `*_repository_sql.ml`
+  реализуют application ports для обеих СУБД. `src/infrastructure/sqlite` и
   `src/infrastructure/postgres` содержат backend-specific pool setup. Lookup
   statements используют `LIMIT 1` и статическую
   cardinality-модель, а `RETURNING` с business invariant явно проверяется

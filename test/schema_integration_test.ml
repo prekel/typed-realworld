@@ -22,23 +22,24 @@ module Insert_user = struct
 end
 
 let insert_user =
-  Statement.Portable.command_exn (fun params ->
-    let id = params.column Users.id_column ~get:(fun input -> input.Insert_user.id) in
-    let email =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters id =
+      params.column Users.id_column ~get:(fun input -> input.Insert_user.id)
+    and email =
       params.column Users.email_column ~get:(fun input -> input.Insert_user.email)
-    in
-    let username =
+    and username =
       params.column Users.username_column ~get:(fun input -> input.Insert_user.username)
     in
-    Insert.(
-      into Users.table
-      |> set_expr Users.id_column id
-      |> set_expr Users.email_column email
-      |> set_expr Users.username_column username
-      |> set Users.password_hash_column "test-hash"
-      |> set Users.bio_column None
-      |> set Users.image_column None
-      |> command))
+    params.command
+      Insert.(
+        into Users.table
+        |> set_expr Users.id_column id
+        |> set_expr Users.email_column email
+        |> set_expr Users.username_column username
+        |> set Users.password_hash_column "test-hash"
+        |> set Users.bio_column None
+        |> set Users.image_column None
+        |> command))
 ;;
 
 module Insert_article = struct
@@ -51,42 +52,41 @@ module Insert_article = struct
 end
 
 let insert_article =
-  Statement.Portable.command_exn (fun params ->
-    let id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters id =
       params.column Articles.id_column ~get:(fun input -> input.Insert_article.id)
-    in
-    let slug =
+    and slug =
       params.column Articles.slug_column ~get:(fun input -> input.Insert_article.slug)
-    in
-    let author_id =
+    and author_id =
       params.column Articles.author_id_column ~get:(fun input ->
         input.Insert_article.author_id)
-    in
-    let now =
+    and now =
       params.column Articles.created_at_column ~get:(fun input ->
         input.Insert_article.now)
     in
-    Insert.(
-      into Articles.table
-      |> set_expr Articles.id_column id
-      |> set_expr Articles.author_id_column author_id
-      |> set_expr Articles.slug_column slug
-      |> set Articles.title_column "Generated schema"
-      |> set Articles.description_column "A typed SQL integration test"
-      |> set Articles.body_column "Content survives schema upgrades."
-      |> set_expr Articles.created_at_column now
-      |> set_expr Articles.updated_at_column now
-      |> command))
+    params.command
+      Insert.(
+        into Articles.table
+        |> set_expr Articles.id_column id
+        |> set_expr Articles.author_id_column author_id
+        |> set_expr Articles.slug_column slug
+        |> set Articles.title_column "Generated schema"
+        |> set Articles.description_column "A typed SQL integration test"
+        |> set Articles.body_column "Content survives schema upgrades."
+        |> set_expr Articles.created_at_column now
+        |> set_expr Articles.updated_at_column now
+        |> command))
 ;;
 
 let article_by_id =
-  Statement.Portable.expect_one_exn (fun params ->
-    let id = params.column Articles.id_column ~get:Fn.id in
-    Query.(
-      from Articles.table
-      |> where (fun row -> Articles.id row =. id)
-      |> limit_one
-      |> select Articles.projection))
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters id = params.column Articles.id_column ~get:Fn.id in
+    params.expect_one
+      Query.(
+        from Articles.table
+        |> where (fun row -> Articles.id row =. id)
+        |> limit_one
+        |> select Articles.projection))
 ;;
 
 module Add_favorite = struct
@@ -97,21 +97,21 @@ module Add_favorite = struct
 end
 
 let add_favorite =
-  Statement.Portable.command_exn (fun params ->
-    let user_id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters user_id =
       params.column Favorites.user_id_column ~get:(fun input ->
         input.Add_favorite.user_id)
-    in
-    let article_id =
+    and article_id =
       params.column Favorites.article_id_column ~get:(fun input ->
         input.Add_favorite.article_id)
     in
-    Insert.(
-      into Favorites.table
-      |> set_expr Favorites.user_id_column user_id
-      |> set_expr Favorites.article_id_column article_id
-      |> on_conflict_do_nothing
-      |> command))
+    params.command
+      Insert.(
+        into Favorites.table
+        |> set_expr Favorites.user_id_column user_id
+        |> set_expr Favorites.article_id_column article_id
+        |> on_conflict_do_nothing
+        |> command))
 ;;
 
 module Follow = struct
@@ -122,20 +122,20 @@ module Follow = struct
 end
 
 let follow =
-  Statement.Portable.command_exn (fun params ->
-    let follower_id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters follower_id =
       params.column Follows.follower_id_column ~get:(fun input ->
         input.Follow.follower_id)
-    in
-    let followed_id =
+    and followed_id =
       params.column Follows.followed_id_column ~get:(fun input ->
         input.Follow.followed_id)
     in
-    Insert.(
-      into Follows.table
-      |> set_expr Follows.follower_id_column follower_id
-      |> set_expr Follows.followed_id_column followed_id
-      |> command))
+    params.command
+      Insert.(
+        into Follows.table
+        |> set_expr Follows.follower_id_column follower_id
+        |> set_expr Follows.followed_id_column followed_id
+        |> command))
 ;;
 
 module Insert_article_tag = struct
@@ -146,21 +146,21 @@ module Insert_article_tag = struct
 end
 
 let insert_article_tag =
-  Statement.Portable.command_exn (fun params ->
-    let article_id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters article_id =
       params.column Article_tags.article_id_column ~get:(fun input ->
         input.Insert_article_tag.article_id)
-    in
-    let tag_id =
+    and tag_id =
       params.column Article_tags.tag_id_column ~get:(fun input ->
         input.Insert_article_tag.tag_id)
     in
-    Insert.(
-      into Article_tags.table
-      |> set_expr Article_tags.article_id_column article_id
-      |> set_expr Article_tags.tag_id_column tag_id
-      |> set Article_tags.position_column 0L
-      |> command))
+    params.command
+      Insert.(
+        into Article_tags.table
+        |> set_expr Article_tags.article_id_column article_id
+        |> set_expr Article_tags.tag_id_column tag_id
+        |> set Article_tags.position_column 0L
+        |> command))
 ;;
 
 module Insert_comment = struct
@@ -172,65 +172,70 @@ module Insert_comment = struct
 end
 
 let insert_comment =
-  Statement.Portable.command_exn (fun params ->
-    let article_id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters article_id =
       params.column Comments.article_id_column ~get:(fun input ->
         input.Insert_comment.article_id)
-    in
-    let body =
+    and body =
       params.column Comments.body_column ~get:(fun input -> input.Insert_comment.body)
-    in
-    let now =
+    and now =
       params.column Comments.created_at_column ~get:(fun input ->
         input.Insert_comment.now)
     in
-    Insert.(
-      into Comments.table
-      |> set_expr Comments.article_id_column article_id
-      |> set Comments.author_id_column 2L
-      |> set_expr Comments.body_column body
-      |> set_expr Comments.created_at_column now
-      |> set_expr Comments.updated_at_column now
-      |> command))
+    params.command
+      Insert.(
+        into Comments.table
+        |> set_expr Comments.article_id_column article_id
+        |> set Comments.author_id_column 2L
+        |> set_expr Comments.body_column body
+        |> set_expr Comments.created_at_column now
+        |> set_expr Comments.updated_at_column now
+        |> command))
 ;;
 
 let joined_article_author =
-  Statement.Portable.expect_one_exn (fun params ->
-    let id = params.column Articles.id_column ~get:Fn.id in
-    Query.(
-      from Articles.table
-      |> inner_join Users.table ~on:(fun article user ->
-        Articles.author_id article =. Users.id user)
-      |> where (fun (article, _) -> Articles.id article =. id)
-      |> limit_one
-      |> select (fun (article, user) ->
-        Projection.pair (Articles.title article) (Users.username user))))
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters id = params.column Articles.id_column ~get:Fn.id in
+    params.expect_one
+      Query.(
+        from Articles.table
+        |> inner_join Users.table ~on:(fun article user ->
+          Articles.author_id article =. Users.id user)
+        |> where (fun (article, _) -> Articles.id article =. id)
+        |> limit_one
+        |> select (fun (article, user) ->
+          Projection.pair (Articles.title article) (Users.username user))))
 ;;
 
 let delete_article =
-  Statement.Portable.command_exn (fun params ->
-    let id = params.column Articles.id_column ~get:Fn.id in
-    Delete.(from Articles.table |> where (fun row -> Articles.id row =. id) |> command))
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters id = params.column Articles.id_column ~get:Fn.id in
+    params.command
+      Delete.(from Articles.table |> where (fun row -> Articles.id row =. id) |> command))
 ;;
 
-let all_favorites : (unit, Favorites.t list, Dialect.portable) Statement.t =
-  Statement.Portable.query_many_exn (fun _ ->
-    Query.(from Favorites.table |> select Favorites.projection))
+let all_favorites =
+  Statement.query_many
+    ~dialect:Dialect.portable
+    Query.(from Favorites.table |> select Favorites.projection)
 ;;
 
-let all_comments : (unit, Comments.t list, Dialect.portable) Statement.t =
-  Statement.Portable.query_many_exn (fun _ ->
-    Query.(from Comments.table |> select Comments.projection))
+let all_comments =
+  Statement.query_many
+    ~dialect:Dialect.portable
+    Query.(from Comments.table |> select Comments.projection)
 ;;
 
-let all_article_tags : (unit, Article_tags.t list, Dialect.portable) Statement.t =
-  Statement.Portable.query_many_exn (fun _ ->
-    Query.(from Article_tags.table |> select Article_tags.projection))
+let all_article_tags =
+  Statement.query_many
+    ~dialect:Dialect.portable
+    Query.(from Article_tags.table |> select Article_tags.projection)
 ;;
 
-let all_tags : (unit, Tags.t list, Dialect.portable) Statement.t =
-  Statement.Portable.query_many_exn (fun _ ->
-    Query.(from Tags.table |> select Tags.projection))
+let all_tags =
+  Statement.query_many
+    ~dialect:Dialect.portable
+    Query.(from Tags.table |> select Tags.projection)
 ;;
 
 let or_fail result =
@@ -363,8 +368,10 @@ let verify conn =
   in
   assert (Option.is_none (or_fail wrong_owner_delete));
   (* Check dialect-neutral query construction now; PostgreSQL execution is a later step. *)
-  List.iter [ Dialect.Sqlite; Dialect.Postgresql ] ~f:(fun dialect ->
-    Statement.sql_exn ~dialect ~input:1L joined_article_author |> ignore);
+  List.iter
+    ([ Sqlite; Postgresql ] : Dialect.both sql_dialect list)
+    ~f:(fun dialect ->
+      Statement.sql_exn ~dialect ~input:1L joined_article_author |> ignore);
   let%bind joined_result = Adapter.run ~conn joined_article_author 1L in
   let title, username = or_fail joined_result in
   assert (String.equal title "Generated schema");

@@ -76,9 +76,7 @@ let filtered ~author ~tag ~favorited_by ~followed_by =
     |> where_optional_param author ~f:(fun article author ->
       from Users.table
       |> where (fun user ->
-        Users.id user
-        =. Articles.author_id article
-        &&. (Expr.to_nullable (Users.username user) =. author))
+        Users.id user =. Articles.author_id article &&. (Users.username user =. author))
       |> exists)
     |> where_optional_param tag ~f:(fun article tag ->
       from Article_tags.table
@@ -87,7 +85,7 @@ let filtered ~author ~tag ~favorited_by ~followed_by =
       |> where (fun (article_tag, tag_row) ->
         Article_tags.article_id article_tag
         =. Articles.id article
-        &&. (Expr.to_nullable (Tags.name tag_row) =. tag))
+        &&. (Tags.name tag_row =. tag))
       |> exists)
     |> where_optional_param favorited_by ~f:(fun article favorited_by ->
       from Favorites.table
@@ -96,12 +94,12 @@ let filtered ~author ~tag ~favorited_by ~followed_by =
       |> where (fun (favorite, user) ->
         Favorites.article_id favorite
         =. Articles.id article
-        &&. (Expr.to_nullable (Users.username user) =. favorited_by))
+        &&. (Users.username user =. favorited_by))
       |> exists)
     |> where_optional_param followed_by ~f:(fun article followed_by ->
       from Follows.table
       |> where (fun follow ->
-        Expr.to_nullable (Follows.follower_id follow)
+        Follows.follower_id follow
         =. followed_by
         &&. (Follows.followed_id follow =. Articles.author_id article))
       |> exists))
@@ -130,31 +128,28 @@ module Page = struct
 end
 
 let page =
-  Statement.Portable.query_many_exn (fun params ->
-    let author = params.expr (Db_type.option Db_type.text) ~get:Page.author in
-    let tag = params.expr (Db_type.option Db_type.text) ~get:Page.tag in
-    let favorited_by = params.expr (Db_type.option Db_type.text) ~get:Page.favorited_by in
-    let followed_by =
-      params.expr (Db_type.option Db_type.int64) ~get:Page.followed_by_value
-    in
-    let viewer_id =
-      params.expr (Db_type.option Db_type.int64) ~get:Page.viewer_id_value
-    in
-    let page_limit = params.non_negative_int ~name:"limit" ~get:Page.limit in
-    let page_offset = params.non_negative_int ~name:"offset" ~get:Page.offset in
-    Query.(
-      filtered ~author ~tag ~favorited_by ~followed_by
-      |> inner_join Users.table ~on:(fun article user ->
-        Articles.author_id article =. Users.id user)
-      |> order_by (fun (article, _) -> Articles.created_at article) `Desc
-      |> order_by (fun (article, _) -> Articles.id article) `Desc
-      |> limit_param page_limit
-      |> offset_param page_offset
-      |> select (read_projection ~viewer_id)))
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters author = params.optional_expr Db_type.text ~get:Page.author
+    and tag = params.optional_expr Db_type.text ~get:Page.tag
+    and favorited_by = params.optional_expr Db_type.text ~get:Page.favorited_by
+    and followed_by = params.optional_expr Db_type.int64 ~get:Page.followed_by_value
+    and viewer_id = params.expr (Db_type.option Db_type.int64) ~get:Page.viewer_id_value
+    and page_limit = params.non_negative_int ~name:"limit" ~get:Page.limit
+    and page_offset = params.non_negative_int ~name:"offset" ~get:Page.offset in
+    params.query_many
+      Query.(
+        filtered ~author ~tag ~favorited_by ~followed_by
+        |> inner_join Users.table ~on:(fun article user ->
+          Articles.author_id article =. Users.id user)
+        |> order_by (fun (article, _) -> Articles.created_at article) `Desc
+        |> order_by (fun (article, _) -> Articles.id article) `Desc
+        |> limit_param page_limit
+        |> offset_param page_offset
+        |> select (read_projection ~viewer_id)))
 ;;
 
 let%expect_test "article page SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite page);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite page);
   [%expect
     {|
     SELECT
@@ -284,54 +279,49 @@ module Count = struct
 end
 
 let count =
-  Statement.Portable.query_one_exn (fun params ->
-    let author = params.expr (Db_type.option Db_type.text) ~get:Count.author in
-    let tag = params.expr (Db_type.option Db_type.text) ~get:Count.tag in
-    let favorited_by =
-      params.expr (Db_type.option Db_type.text) ~get:Count.favorited_by
-    in
-    let followed_by =
-      params.expr (Db_type.option Db_type.int64) ~get:Count.followed_by_value
-    in
-    Query.(
-      Aggregate.from Articles.table
-      |> Aggregate.where_optional_param author ~f:(fun article author ->
-        from Users.table
-        |> where (fun user ->
-          Users.id user
-          =. Articles.author_id article
-          &&. (Expr.to_nullable (Users.username user) =. author))
-        |> exists)
-      |> Aggregate.where_optional_param tag ~f:(fun article tag ->
-        from Article_tags.table
-        |> inner_join Tags.table ~on:(fun article_tag tag_row ->
-          Article_tags.tag_id article_tag =. Tags.id tag_row)
-        |> where (fun (article_tag, tag_row) ->
-          Article_tags.article_id article_tag
-          =. Articles.id article
-          &&. (Expr.to_nullable (Tags.name tag_row) =. tag))
-        |> exists)
-      |> Aggregate.where_optional_param favorited_by ~f:(fun article favorited_by ->
-        from Favorites.table
-        |> inner_join Users.table ~on:(fun favorite user ->
-          Favorites.user_id favorite =. Users.id user)
-        |> where (fun (favorite, user) ->
-          Favorites.article_id favorite
-          =. Articles.id article
-          &&. (Expr.to_nullable (Users.username user) =. favorited_by))
-        |> exists)
-      |> Aggregate.where_optional_param followed_by ~f:(fun article followed_by ->
-        from Follows.table
-        |> where (fun follow ->
-          Expr.to_nullable (Follows.follower_id follow)
-          =. followed_by
-          &&. (Follows.followed_id follow =. Articles.author_id article))
-        |> exists)
-      |> aggregate_one (fun _ -> Aggregate_projection.count_all)))
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters author = params.optional_expr Db_type.text ~get:Count.author
+    and tag = params.optional_expr Db_type.text ~get:Count.tag
+    and favorited_by = params.optional_expr Db_type.text ~get:Count.favorited_by
+    and followed_by = params.optional_expr Db_type.int64 ~get:Count.followed_by_value in
+    params.query_one
+      Query.(
+        Aggregate.from Articles.table
+        |> Aggregate.where_optional_param author ~f:(fun article author ->
+          from Users.table
+          |> where (fun user ->
+            Users.id user =. Articles.author_id article &&. (Users.username user =. author))
+          |> exists)
+        |> Aggregate.where_optional_param tag ~f:(fun article tag ->
+          from Article_tags.table
+          |> inner_join Tags.table ~on:(fun article_tag tag_row ->
+            Article_tags.tag_id article_tag =. Tags.id tag_row)
+          |> where (fun (article_tag, tag_row) ->
+            Article_tags.article_id article_tag
+            =. Articles.id article
+            &&. (Tags.name tag_row =. tag))
+          |> exists)
+        |> Aggregate.where_optional_param favorited_by ~f:(fun article favorited_by ->
+          from Favorites.table
+          |> inner_join Users.table ~on:(fun favorite user ->
+            Favorites.user_id favorite =. Users.id user)
+          |> where (fun (favorite, user) ->
+            Favorites.article_id favorite
+            =. Articles.id article
+            &&. (Users.username user =. favorited_by))
+          |> exists)
+        |> Aggregate.where_optional_param followed_by ~f:(fun article followed_by ->
+          from Follows.table
+          |> where (fun follow ->
+            Follows.follower_id follow
+            =. followed_by
+            &&. (Follows.followed_id follow =. Articles.author_id article))
+          |> exists)
+        |> aggregate_one (fun _ -> Aggregate_projection.count_all)))
 ;;
 
 let%expect_test "article count SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite count);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite count);
   [%expect
     {|
     SELECT
@@ -399,13 +389,14 @@ let%expect_test "article count SQL" =
     |}]
 ;;
 
-let all_tags : (unit, Tags.t list, Dialect.portable) Statement.t =
-  Statement.Portable.query_many_exn (fun _ ->
-    Query.(from Tags.table |> select Tags.projection))
+let all_tags =
+  Statement.query_many
+    ~dialect:Dialect.portable
+    Query.(from Tags.table |> select Tags.projection)
 ;;
 
 let%expect_test "all tags SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite all_tags);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite all_tags);
   [%expect
     {|
     SELECT
@@ -416,7 +407,7 @@ let%expect_test "all tags SQL" =
 ;;
 
 let article_tags_by_article_ids =
-  Statement.Dynamic.Portable.query_many (fun article_ids ->
+  Statement.Dynamic.query_many ~dialect:Dialect.portable (fun article_ids ->
     Query.(
       from Article_tags.table
       |> inner_join Tags.table ~on:(fun article_tag tag ->
@@ -435,10 +426,7 @@ let article_tags_by_article_ids =
 
 let%expect_test "article tags by article IDs SQL" =
   Stdlib.print_endline
-    (Statement.sql_exn
-       ~dialect:Dialect.Sqlite
-       ~input:[ 101L; 102L ]
-       article_tags_by_article_ids);
+    (Statement.sql_exn ~dialect:Sqlite ~input:[ 101L; 102L ] article_tags_by_article_ids);
   [%expect
     {|
     SELECT
@@ -471,22 +459,22 @@ module Read_by_slug = struct
 end
 
 let read_by_slug =
-  Statement.Portable.query_optional_exn (fun params ->
-    let viewer_id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters viewer_id =
       params.expr (Db_type.option Db_type.int64) ~get:Read_by_slug.viewer_id_value
-    in
-    let slug = params.column Articles.slug_column ~get:Read_by_slug.slug_value in
-    Query.(
-      from Articles.table
-      |> inner_join Users.table ~on:(fun article user ->
-        Articles.author_id article =. Users.id user)
-      |> where (fun (article, _) -> Articles.slug article =. slug)
-      |> limit_one
-      |> select (read_projection ~viewer_id)))
+    and slug = params.column Articles.slug_column ~get:Read_by_slug.slug_value in
+    params.query_optional
+      Query.(
+        from Articles.table
+        |> inner_join Users.table ~on:(fun article user ->
+          Articles.author_id article =. Users.id user)
+        |> where (fun (article, _) -> Articles.slug article =. slug)
+        |> limit_one
+        |> select (read_projection ~viewer_id)))
 ;;
 
 let%expect_test "read article by slug SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite read_by_slug);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite read_by_slug);
   [%expect
     {|
     SELECT
@@ -538,17 +526,20 @@ let%expect_test "read article by slug SQL" =
 ;;
 
 let by_slug =
-  Statement.Portable.query_optional_exn (fun params ->
-    let slug = params.column Articles.slug_column ~get:Domain.Article.Slug.to_string in
-    Query.(
-      from Articles.table
-      |> where (fun article -> Articles.slug article =. slug)
-      |> limit_one
-      |> select Articles.projection))
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters slug =
+      params.column Articles.slug_column ~get:Domain.Article.Slug.to_string
+    in
+    params.query_optional
+      Query.(
+        from Articles.table
+        |> where (fun article -> Articles.slug article =. slug)
+        |> limit_one
+        |> select Articles.projection))
 ;;
 
 let%expect_test "article by slug SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite by_slug);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite by_slug);
   [%expect
     {|
     SELECT
@@ -583,31 +574,30 @@ module Create_article = struct
 end
 
 let create_article =
-  Statement.Portable.expect_one_exn (fun params ->
-    let author_id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters author_id =
       params.column Articles.author_id_column ~get:Create_article.author_id_value
-    in
-    let slug = params.column Articles.slug_column ~get:Create_article.slug_value in
-    let title = params.column Articles.title_column ~get:Create_article.title in
-    let description =
+    and slug = params.column Articles.slug_column ~get:Create_article.slug_value
+    and title = params.column Articles.title_column ~get:Create_article.title
+    and description =
       params.column Articles.description_column ~get:Create_article.description
-    in
-    let body = params.column Articles.body_column ~get:Create_article.body in
-    let now = params.column Articles.created_at_column ~get:Create_article.now in
-    Insert.(
-      into Articles.table
-      |> set_expr Articles.author_id_column author_id
-      |> set_expr Articles.slug_column slug
-      |> set_expr Articles.title_column title
-      |> set_expr Articles.description_column description
-      |> set_expr Articles.body_column body
-      |> set_expr Articles.created_at_column now
-      |> set_expr Articles.updated_at_column now
-      |> returning Articles.projection))
+    and body = params.column Articles.body_column ~get:Create_article.body
+    and now = params.column Articles.created_at_column ~get:Create_article.now in
+    params.expect_one
+      Insert.(
+        into Articles.table
+        |> set_expr Articles.author_id_column author_id
+        |> set_expr Articles.slug_column slug
+        |> set_expr Articles.title_column title
+        |> set_expr Articles.description_column description
+        |> set_expr Articles.body_column body
+        |> set_expr Articles.created_at_column now
+        |> set_expr Articles.updated_at_column now
+        |> returning Articles.projection))
 ;;
 
 let%expect_test "create article SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite create_article);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite create_article);
   [%expect
     {|
     INSERT INTO "articles" (
@@ -650,32 +640,31 @@ module Update_article = struct
 end
 
 let update_article =
-  Statement.Portable.expect_optional_exn (fun params ->
-    let id = params.column Articles.id_column ~get:Update_article.id in
-    let author_id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters id = params.column Articles.id_column ~get:Update_article.id
+    and author_id =
       params.column Articles.author_id_column ~get:Update_article.author_id_value
-    in
-    let slug = params.column Articles.slug_column ~get:Update_article.slug_value in
-    let title = params.column Articles.title_column ~get:Update_article.title in
-    let description =
+    and slug = params.column Articles.slug_column ~get:Update_article.slug_value
+    and title = params.column Articles.title_column ~get:Update_article.title
+    and description =
       params.column Articles.description_column ~get:Update_article.description
-    in
-    let body = params.column Articles.body_column ~get:Update_article.body in
-    let now = params.column Articles.updated_at_column ~get:Update_article.now in
-    Update.(
-      table Articles.table
-      |> set_expr Articles.slug_column slug
-      |> set_expr Articles.title_column title
-      |> set_expr Articles.description_column description
-      |> set_expr Articles.body_column body
-      |> set_expr Articles.updated_at_column now
-      |> where (fun article ->
-        Articles.id article =. id &&. (Articles.author_id article =. author_id))
-      |> returning (fun article -> Projection.expr (Articles.id article))))
+    and body = params.column Articles.body_column ~get:Update_article.body
+    and now = params.column Articles.updated_at_column ~get:Update_article.now in
+    params.expect_optional
+      Update.(
+        table Articles.table
+        |> set_expr Articles.slug_column slug
+        |> set_expr Articles.title_column title
+        |> set_expr Articles.description_column description
+        |> set_expr Articles.body_column body
+        |> set_expr Articles.updated_at_column now
+        |> where (fun article ->
+          Articles.id article =. id &&. (Articles.author_id article =. author_id))
+        |> returning (fun article -> Projection.expr (Articles.id article))))
 ;;
 
 let%expect_test "update article SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite update_article);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite update_article);
   [%expect
     {|
     UPDATE "articles"
@@ -706,20 +695,21 @@ module Delete_article = struct
 end
 
 let delete_article =
-  Statement.Portable.expect_optional_exn (fun params ->
-    let id = params.column Articles.id_column ~get:Delete_article.id in
-    let author_id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters id = params.column Articles.id_column ~get:Delete_article.id
+    and author_id =
       params.column Articles.author_id_column ~get:Delete_article.author_id_value
     in
-    Delete.(
-      from Articles.table
-      |> where (fun article ->
-        Articles.id article =. id &&. (Articles.author_id article =. author_id))
-      |> returning (fun article -> Projection.expr (Articles.id article))))
+    params.expect_optional
+      Delete.(
+        from Articles.table
+        |> where (fun article ->
+          Articles.id article =. id &&. (Articles.author_id article =. author_id))
+        |> returning (fun article -> Projection.expr (Articles.id article))))
 ;;
 
 let%expect_test "delete article SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite delete_article);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite delete_article);
   [%expect
     {|
     DELETE FROM "articles"
@@ -734,19 +724,22 @@ let%expect_test "delete article SQL" =
 ;;
 
 let upsert_tag =
-  Statement.Portable.expect_one_exn (fun params ->
-    let name = params.column Tags.name_column ~get:Domain.Article.Tag.to_string in
-    Insert.(
-      into Tags.table
-      |> set_expr Tags.name_column name
-      |> on_conflict (Conflict_target.column Tags.name_column)
-      |> do_update (fun ~existing:_ ~excluded ->
-        Conflict_update.(empty |> set_expr Tags.name_column (Tags.name excluded)))
-      |> returning Tags.projection))
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters name =
+      params.column Tags.name_column ~get:Domain.Article.Tag.to_string
+    in
+    params.expect_one
+      Insert.(
+        into Tags.table
+        |> set_expr Tags.name_column name
+        |> on_conflict (Conflict_target.column Tags.name_column)
+        |> do_update (fun ~existing:_ ~excluded ->
+          Conflict_update.(empty |> set_expr Tags.name_column (Tags.name excluded)))
+        |> returning Tags.projection))
 ;;
 
 let%expect_test "upsert tag SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite upsert_tag);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite upsert_tag);
   [%expect
     {|
     INSERT INTO "tags" AS t0 (
@@ -767,16 +760,19 @@ let%expect_test "upsert tag SQL" =
 ;;
 
 let clear_tags =
-  Statement.Portable.command_exn (fun params ->
-    let article_id = params.column Article_tags.article_id_column ~get:Fn.id in
-    Delete.(
-      from Article_tags.table
-      |> where (fun tag -> Article_tags.article_id tag =. article_id)
-      |> command))
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters article_id =
+      params.column Article_tags.article_id_column ~get:Fn.id
+    in
+    params.command
+      Delete.(
+        from Article_tags.table
+        |> where (fun tag -> Article_tags.article_id tag =. article_id)
+        |> command))
 ;;
 
 let%expect_test "clear article tags SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite clear_tags);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite clear_tags);
   [%expect
     {|
     DELETE FROM "article_tags"
@@ -797,24 +793,24 @@ module Attach_tag = struct
 end
 
 let attach_tag =
-  Statement.Portable.command_exn (fun params ->
-    let article_id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters article_id =
       params.column Article_tags.article_id_column ~get:Attach_tag.article_id
-    in
-    let tag_id = params.column Article_tags.tag_id_column ~get:Attach_tag.tag_id in
-    let position =
+    and tag_id = params.column Article_tags.tag_id_column ~get:Attach_tag.tag_id
+    and position =
       params.column Article_tags.position_column ~get:Attach_tag.position_value
     in
-    Insert.(
-      into Article_tags.table
-      |> set_expr Article_tags.article_id_column article_id
-      |> set_expr Article_tags.tag_id_column tag_id
-      |> set_expr Article_tags.position_column position
-      |> command))
+    params.command
+      Insert.(
+        into Article_tags.table
+        |> set_expr Article_tags.article_id_column article_id
+        |> set_expr Article_tags.tag_id_column tag_id
+        |> set_expr Article_tags.position_column position
+        |> command))
 ;;
 
 let%expect_test "attach tag SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite attach_tag);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite attach_tag);
   [%expect
     {|
     INSERT INTO "article_tags" (
@@ -838,23 +834,23 @@ module Add_favorite = struct
 end
 
 let add_favorite =
-  Statement.Portable.command_exn (fun params ->
-    let user_id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters user_id =
       params.column Favorites.user_id_column ~get:Add_favorite.user_id_value
-    in
-    let article_id =
+    and article_id =
       params.column Favorites.article_id_column ~get:Add_favorite.article_id
     in
-    Insert.(
-      into Favorites.table
-      |> set_expr Favorites.user_id_column user_id
-      |> set_expr Favorites.article_id_column article_id
-      |> on_conflict_do_nothing
-      |> command))
+    params.command
+      Insert.(
+        into Favorites.table
+        |> set_expr Favorites.user_id_column user_id
+        |> set_expr Favorites.article_id_column article_id
+        |> on_conflict_do_nothing
+        |> command))
 ;;
 
 let%expect_test "add favorite SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite add_favorite);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite add_favorite);
   [%expect
     {|
     INSERT INTO "favorites" (
@@ -868,24 +864,24 @@ let%expect_test "add favorite SQL" =
 ;;
 
 let remove_favorite =
-  Statement.Portable.command_exn (fun params ->
-    let user_id =
+  Statement.with_parameters ~dialect:Dialect.portable (fun ~params ->
+    let%map.Parameters user_id =
       params.column Favorites.user_id_column ~get:Add_favorite.user_id_value
-    in
-    let article_id =
+    and article_id =
       params.column Favorites.article_id_column ~get:Add_favorite.article_id
     in
-    Delete.(
-      from Favorites.table
-      |> where (fun favorite ->
-        Favorites.user_id favorite
-        =. user_id
-        &&. (Favorites.article_id favorite =. article_id))
-      |> command))
+    params.command
+      Delete.(
+        from Favorites.table
+        |> where (fun favorite ->
+          Favorites.user_id favorite
+          =. user_id
+          &&. (Favorites.article_id favorite =. article_id))
+        |> command))
 ;;
 
 let%expect_test "remove favorite SQL" =
-  Stdlib.print_endline (Statement.sql_exn ~dialect:Dialect.Sqlite remove_favorite);
+  Stdlib.print_endline (Statement.sql_exn ~dialect:Sqlite remove_favorite);
   [%expect
     {|
     DELETE FROM "favorites"

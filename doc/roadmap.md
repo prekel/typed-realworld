@@ -19,7 +19,7 @@ transaction boundaries, repositories используют `typed-sql`, а схе
 
 ## Возможности текущего typed-sql
 
-В `typed-sql 0.3.5` доступны необходимые возможности:
+В `typed-sql 0.4.5` доступны необходимые возможности:
 
 - `JOIN`, correlated `EXISTS`, aggregates, scalar subqueries и applicative
   projections для read models;
@@ -30,6 +30,11 @@ transaction boundaries, repositories используют `typed-sql`, а схе
 - target-specific `ON CONFLICT`, `DO UPDATE` и `DO NOTHING`;
 - `Statement.Dynamic` для batch `IN`, где число идентификаторов действительно
   меняет SQL shape;
+- `Statement.with_parameters` для статических statements с общим input и
+  аппликативно собранными typed bind-параметрами;
+- `Statement.choose_dialect` для batch lookup пользователей: PostgreSQL
+  использует `= ANY` с одним параметром `bigint[]`, SQLite — `IN` с отдельным
+  bind-параметром на каждый ID;
 - `Query.exists_expr` для boolean projection без nullable scalar subquery;
 - типизированный `Values` как источник строк для `FROM` и `JOIN`;
 - `Insert.from_select` для вставки результата совместимого `SELECT`;
@@ -39,7 +44,9 @@ transaction boundaries, repositories используют `typed-sql`, а схе
 statement статей использует этот combinator. Article read model применяет
 `Query.exists_expr` для `following` и `favorited`, получая ненулевые SQL
 boolean-значения. Правила для aggregate и query statements зафиксированы в
-`AGENTS.md`.
+`AGENTS.md`. Инструмент снимка схемы теперь использует отдельные пакеты
+`typed-sql-schema` и `typed-sql-schema-caqti-lwt`; порядок обновления схемы
+описан в [руководстве по миграциям](migrations.md).
 
 ## 1. Убрать полные сканы profiles и follows
 
@@ -223,7 +230,7 @@ password hash через тип обычного пользователя.
 - [x] Оставить `select_exactly_one` только для форм, которые новый API ещё не
   выражает, с явным объяснением причины рядом с statement.
 
-`Query.aggregate_one` уже доступен в `typed-sql 0.3.5`. В текущих SQL-модулях
+`Query.aggregate_one` доступен в `typed-sql 0.4.1`. В текущих SQL-модулях
 `select_exactly_one` больше не используется.
 
 ## 9. Проверять SQLite и PostgreSQL перед релизом
@@ -278,7 +285,8 @@ password hash через тип обычного пользователя.
 
 ## История выполнения
 
-Пункты 1–7 и переход на `Query.aggregate_one` выполнены следующими срезами:
+Пункты 1–7, переход на `Query.aggregate_one` и обновление typed-sql выполнены
+следующими срезами:
 
 1. profiles/follows без полных сканов и удаление мёртвых `all_*` statements;
 2. scoped mutations вместе со структурированной классификацией конфликтов;
@@ -286,7 +294,10 @@ password hash через тип обычного пользователя.
 4. компактный article read model;
 5. OpenAPI endpoint и contract snapshot;
 6. разделение `User.t` и credentials;
-7. миграция на `Query.aggregate_one` после релиза typed-sql.
+7. миграция на `Query.aggregate_one` после релиза typed-sql;
+8. обновление до typed-sql 0.4.5: статические statements с
+   `let%map.Parameters`, схема версии 2 и выбор SQL по диалекту для batch
+   lookup пользователей.
 
 Каждый срез должен завершаться `make check`. Изменения SQL statements должны
 сохранять отдельный inline `[%expect]` непосредственно после объявления

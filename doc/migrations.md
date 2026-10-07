@@ -1,27 +1,45 @@
 # Миграции и генерация схемы
 
-Источником структуры БД служат SQL-миграции в `db/migrations/sqlite/`.
-Их выполняет [dbmate](https://github.com/amacneil/dbmate/tree/v2.35.1) версии
-2.35.1. Таблица `schema_migrations` хранит применённые версии. Контрольных сумм
-SQL dbmate не хранит: уже применённые файлы не редактируем, исправления добавляем
-следующим файлом.
+Структуру БД задают отдельные SQL-миграции в `db/migrations/sqlite/` и
+`db/migrations/postgres/`. Их выполняет
+[dbmate](https://github.com/amacneil/dbmate/tree/v2.35.1) версии 2.35.1.
+`scripts/dbmate.sh` выбирает каталог по `REALWORLD_DATABASE_URL`: `sqlite:` и
+`sqlite3:` означают SQLite, `postgresql:` — PostgreSQL. Если URL не задан,
+используется `sqlite3:realworld.sqlite3`.
+
+Таблица `schema_migrations` хранит применённые версии. Контрольных сумм SQL
+dbmate не хранит: уже применённые файлы не редактируем, исправления добавляем
+следующей миграцией.
 
 ## Цикл изменения
 
-1. `make migration NAME=add_bio_index` создаёт SQL-файл с timestamp в имени.
-2. Заполняем `-- migrate:up`. Секция `-- migrate:down` описывает обратную
-   операцию только там, где она осмысленна; она не возвращает удалённые данные.
-3. `make schema` создаёт временную SQLite-БД и применяет весь набор миграций.
-4. Caqti introspection читает schema IR, исключает `schema_migrations`, проверяет
-   возможность генерации и сохраняет `db/schema.json`.
-5. Dune запускает `typed-sql-codegen` на JSON-снимке. `Schema.Users`,
-   `Schema.Articles` и другие модули появляются только внутри `_build`.
-6. Проверяем SQL и снимок, выполняем `make migrate` для рабочей БД и `make check`.
+1. Создаём миграцию для нужного диалекта. При изменении общей модели создаём
+   соответствующие файлы в обоих каталогах:
 
-Обычная сборка не подключается к БД и не вызывает dbmate. Генерация схемы не
-читает `REALWORLD_DATABASE_URL`: этот адрес используется только отдельными
-командами `make migrate` и `make db-status`. Тесты не удаляют и не
-переинициализируют рабочую БД.
+   ```sh
+   make migration NAME=add_bio_index
+   REALWORLD_DATABASE_URL='postgresql://localhost/typed_realworld?sslmode=disable' make migration NAME=add_bio_index
+   ```
+
+2. Заполняем `-- migrate:up` в каждом файле. Секция `-- migrate:down` описывает
+   обратную операцию только там, где она осмысленна; она не возвращает удалённые
+   данные. Версии двух наборов миграций ведутся независимо, но итоговая
+   прикладная модель таблиц должна совпадать.
+3. `make schema` создаёт временную SQLite-БД, применяет SQLite-миграции и
+   обновляет `db/schema.json`. Снимок имеет формат typed-sql schema версии 2;
+   `schema_migrations` в него не входит.
+4. `Typed_sql_schema_caqti_lwt.introspect` читает структуру, а
+   `Typed_sql_schema.Schema_codegen` проверяет, что из неё можно создать
+   descriptors. Dune запускает `typed-sql-codegen` на снимке: `Schema.Users`,
+   `Schema.Articles` и другие модули появляются только внутри `_build`.
+5. Проверяем `make schema-check`, `make check` и `make test-postgres`, затем
+   явно применяем миграции к нужным рабочим БД через `make migrate` с их URL.
+
+Обычная сборка не подключается к БД и не вызывает dbmate. `make schema` и
+`make schema-check` всегда работают с временной SQLite-БД и не читают
+`REALWORLD_DATABASE_URL`; этот адрес используется командами `make migrate`,
+`make migration` и `make db-status`. Тесты не удаляют и не переинициализируют
+рабочую БД.
 
 `make schema-check` строит временную БД и сравнивает полученный снимок с
 сохранённым. При несовпадении показывает diff и завершается с ошибкой. Не
@@ -46,7 +64,7 @@ SQL dbmate не хранит: уже применённые файлы не ре
 
 ## Границы снимка и слоёв
 
-Снимок `typed-sql` содержит таблицы, типы, nullability, defaults, generated
+Снимок `typed-sql-schema` содержит таблицы, типы, nullability, defaults, generated
 flags, PK, FK и UNIQUE metadata. Он не описывает всю физическую схему:
 обычные индексы, CHECK-выражения и действия `ON DELETE` остаются в SQL.
 Поэтому совпадение снимка дополняется интеграционными тестами ограничений,
@@ -55,16 +73,18 @@ flags, PK, FK и UNIQUE metadata. Он не описывает всю физич
 Сгенерированные row records — представление хранения. Repository query layer
 преобразует их в domain/read models. Пример — `User_queries`, проверяемый через
 реальную Caqti/SQLite connection. Domain и application не импортируют
-`Realworld_sqlite.Schema`.
+`Schema` из SQL-слоя.
 
-## PostgreSQL позже
+## Проверки двух диалектов
 
-Для PostgreSQL появится собственный каталог SQL-миграций и отдельная проверка
-через реальный сервер. Совпадение типов, defaults и поведения constraints
-потребует проверки; одинаковая версия миграции не делает два диалекта
-эквивалентными автоматически. SQLite `INTEGER` сейчас генерируется как `int64`;
-при выборе типов PostgreSQL нужно сохранить этот контракт хранения.
+`make test` проверяет SQLite-миграции на свежей и обновлённой БД, повторное
+применение, откат неудачной миграции, снимок и запросы к сгенерированной схеме.
+`make check` включает эти проверки и SQLite Hurl suite. `make test-postgres`
+поднимает временный кластер PostgreSQL 18, применяет PostgreSQL-миграции и
+запускает repository integration tests и тот же Hurl suite. Кластер удаляется
+после проверки.
 
-Пока поддержана только SQLite: команды миграций отклоняют PostgreSQL URL.
-Компиляция тестового JOIN для двух диалектов проверяет переносимость запроса,
-но не заменяет будущие PostgreSQL integration tests.
+`db/schema.json` строится только из SQLite-миграций. Автоматического сравнения
+физических схем двух СУБД пока нет: обычные индексы, типы и defaults PostgreSQL
+проверяются через миграции и integration tests, но их полное равенство снимку
+не доказано. Этот шаг остаётся в [дорожной карте](roadmap.md).

@@ -7,14 +7,14 @@
 - `src/application/` — application services и порты `Database`, repositories,
   password hashing и token service. Сервис задаёт transaction boundary;
   repository принимает только transaction-scoped `~conn`.
-- `src/infrastructure/` — реализации портов через `typed-sql`, Caqti/SQLite,
-  scrypt и JWT HS256.
+- `src/infrastructure/` — реализации портов через `typed-sql`, Caqti,
+  SQLite/PostgreSQL, scrypt и JWT HS256.
 - `src/http/` — DTO, guards и typed-endpoint controllers. DTO задают wire
   shape; доменные типы не сериализуются напрямую.
 - `bin/` — composition root Opium: конфигурация, pool, middleware и lifecycle.
 - `test/` — unit, integration и wire-contract tests.
-- `db/migrations/sqlite/` — источник схемы SQLite, SQL-файлы dbmate. Уже
-  применённые миграции не редактируются; PostgreSQL будет отдельным набором.
+- `db/migrations/sqlite/` и `db/migrations/postgres/` — отдельные наборы
+  SQL-миграций dbmate. Уже применённые миграции не редактируются.
 - `db/schema.json` — снимок, обновляемый только через `make schema`.
   `schema_migrations` в него не включается.
 - `tools/schema_snapshot.ml` и `scripts/schema.sh` — introspection временной БД.
@@ -83,13 +83,17 @@
   переименуй параметр. DML оформляй через `Insert.(...)`, `Update.(...)` или
   `Delete.(...)`, без квалифицированных вызовов функций builder. Вложенные
   модули, например `Conflict_target`, используй внутри того же открытия.
-- Каждый statement объявляй корневым `snake_case` значением query-модуля и
-  создавай через `Statement.Portable` при инициализации модуля. Отдельный
-  модуль создавай только для нового record-типа input с несколькими полями:
-  он содержит `type t` и getter'ы, а statement остаётся рядом в корневом
-  модуле. Для scalar input используй доменный или primitive тип напрямую; для
-  отсутствующего input задай `unit` в типе statement, без аннотации параметра
-  callback. Выполняй statements единым `Typed_sql_caqti_lwt.run`.
+- Каждый statement объявляй корневым `snake_case` значением query-модуля.
+  Параметризованные статические statements собирай через
+  `Statement.with_parameters ~dialect:Dialect.portable (fun ~params -> ...)`,
+  сочетая декларации через `let%map.Parameters` и `and`; не открывай
+  `Parameters.Let_syntax`. Без runtime input используй
+  соответствующий `Statement.query_* ~dialect:Dialect.portable`.
+  Отдельный модуль создавай только для нового record-типа input с несколькими
+  полями: он содержит `type t` и getter'ы, а statement остаётся рядом в
+  корневом модуле. Для scalar input используй доменный или primitive тип
+  напрямую; для отсутствующего input задай `unit` в типе statement. Выполняй
+  statements единым `Typed_sql_caqti_lwt.run`.
 - `Statement.Dynamic` используй только когда runtime input меняет неограниченную
   форму SQL, например число элементов `IN`. Optional scalar filters выражай
   nullable parameters, а небольшой конечный набор форм — `Statement.choose`.

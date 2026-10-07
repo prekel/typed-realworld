@@ -7,7 +7,8 @@
   caqti-driver-sqlite3
   lwt.unix
   typed-sql
-  typed-sql-caqti-lwt
+  typed-sql-schema
+  typed-sql-schema-caqti-lwt
   uri)
  (preprocess
   (pps ppx_let)))

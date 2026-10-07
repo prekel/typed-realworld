@@ -1,4 +1,7 @@
 open! Base
+module Schema_ir = Typed_sql_schema.Schema_ir
+module Schema_codegen = Typed_sql_schema.Schema_codegen
+module Schema_snapshot = Typed_sql_schema.Schema_snapshot
 open Typed_sql
 
 let application_schema schema =
@@ -20,10 +23,10 @@ let run uri =
     let module Connection = (val conn : Caqti_lwt.CONNECTION) in
     Lwt.finalize
       (fun () ->
-         let%map discovered = Typed_sql_caqti_lwt.Schema.introspect ~conn in
+         let%map discovered = Typed_sql_schema_caqti_lwt.introspect ~conn in
          let open Result.Let_syntax in
          let%bind schema =
-           Result.map_error discovered ~f:Typed_sql_caqti_lwt.error_to_string
+           Result.map_error discovered ~f:Typed_sql_schema_caqti_lwt.error_to_string
          in
          let schema = application_schema schema in
          (* Reject unsupported database types before replacing the saved snapshot. *)

@@ -2,9 +2,11 @@ all: build
 
 PACKAGES = ./typed-realworld.opam
 TYPED_ENDPOINT_VERSION = 0.2.0
-TYPED_SQL_VERSION = 0.3.5
+TYPED_SQL_VERSION = 0.4.5
 TYPED_ENDPOINT_DIR ?= ../typed-endpoint
 TYPED_SQL_DIR ?= ../typed-sql
+TYPED_ENDPOINT_GIT ?= git+file://$(abspath $(TYPED_ENDPOINT_DIR))
+TYPED_SQL_GIT ?= git+file://$(abspath $(TYPED_SQL_DIR))
 export NAME
 export DBMATE_BIN ?= $(CURDIR)/.tools/bin/dbmate
 export HURL_BIN ?= $(CURDIR)/.tools/bin/hurl
@@ -16,12 +18,14 @@ create_switch:
 
 .PHONY: pins
 pins:
-	opam pin add --kind=path typed-endpoint.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_DIR) -yn
-	opam pin add --kind=path typed-endpoint-opium.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_DIR) -yn
-	opam pin add --kind=path typed-endpoint-testing.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_DIR) -yn
-	opam pin add --kind=path typed-endpoint-ppx.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_DIR) -yn
-	opam pin add --kind=path typed-sql.$(TYPED_SQL_VERSION) $(TYPED_SQL_DIR) -yn
-	opam pin add --kind=path typed-sql-caqti-lwt.$(TYPED_SQL_VERSION) $(TYPED_SQL_DIR) -yn
+	opam pin add --kind=git typed-endpoint.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_GIT)#v$(TYPED_ENDPOINT_VERSION) -yn
+	opam pin add --kind=git typed-endpoint-opium.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_GIT)#v$(TYPED_ENDPOINT_VERSION) -yn
+	opam pin add --kind=git typed-endpoint-testing.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_GIT)#v$(TYPED_ENDPOINT_VERSION) -yn
+	opam pin add --kind=git typed-endpoint-ppx.$(TYPED_ENDPOINT_VERSION) $(TYPED_ENDPOINT_GIT)#v$(TYPED_ENDPOINT_VERSION) -yn
+	opam pin add --kind=git typed-sql.$(TYPED_SQL_VERSION) $(TYPED_SQL_GIT)#v$(TYPED_SQL_VERSION) -yn
+	opam pin add --kind=git typed-sql-caqti-lwt.$(TYPED_SQL_VERSION) $(TYPED_SQL_GIT)#v$(TYPED_SQL_VERSION) -yn
+	opam pin add --kind=git typed-sql-schema.$(TYPED_SQL_VERSION) $(TYPED_SQL_GIT)#v$(TYPED_SQL_VERSION) -yn
+	opam pin add --kind=git typed-sql-schema-caqti-lwt.$(TYPED_SQL_VERSION) $(TYPED_SQL_GIT)#v$(TYPED_SQL_VERSION) -yn
 
 .PHONY: metadata
 metadata:
