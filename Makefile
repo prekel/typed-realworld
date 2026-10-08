@@ -63,7 +63,7 @@ package:
 	opam lint $(PACKAGES)
 
 .PHONY: check
-check: fmt build test frontend-test api-test doc package schema-check
+check: fmt build test frontend-types-check frontend-test api-test doc package schema-check
 
 .PHONY: release-check
 release-check: check
@@ -105,12 +105,16 @@ schema-check:
 	bash scripts/schema.sh check
 
 .PHONY: server
-server: frontend-build
+server:
 	opam exec -- dune exec --root . bin/realworld_server.exe
 
 .PHONY: server-postgres
-server-postgres: frontend-build
+server-postgres:
 	opam exec -- dune exec --root . bin/realworld_server_postgres.exe
+
+.PHONY: openapi
+openapi:
+	opam exec -- dune build --root . tools/openapi.json
 
 .PHONY: frontend-deps
 frontend-deps: frontend/node_modules/.package-lock.json
@@ -119,8 +123,12 @@ frontend/node_modules/.package-lock.json: frontend/package.json frontend/package
 	cd frontend && bash ../scripts/linux-npm.sh ci
 
 .PHONY: frontend-types
-frontend-types: frontend-deps
-	cd frontend && OPENAPI_URL="$(or $(OPENAPI_URL),http://127.0.0.1:3000/openapi.json)" bash ../scripts/linux-npm.sh run generate:api
+frontend-types: openapi frontend-deps
+	bash scripts/frontend-types.sh update
+
+.PHONY: frontend-types-check
+frontend-types-check: openapi frontend-deps
+	bash scripts/frontend-types.sh check
 
 .PHONY: frontend-build
 frontend-build: frontend-deps

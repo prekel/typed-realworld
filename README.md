@@ -29,6 +29,7 @@ make create_switch
 make deps_all
 make tools
 make migrate
+make frontend-build
 make server
 ```
 
@@ -45,10 +46,17 @@ URL по умолчанию. Бинарники проверяют схему UR
 
 Сервер по умолчанию слушает `http://127.0.0.1:3000`: на `/` и `/app` он
 отдаёт HTML shell, `/app.js` — настроенный JS bundle, а `/api` — API. Для bundle
-`make server` сначала собирает React/TypeScript frontend. Bundle можно задать
-через `REALWORLD_FRONTEND_BUNDLE`; без доступного файла `/app.js` вернёт 503.
-Для обновления сгенерированного API-клиента оставь backend запущенным и выполни
-`make frontend-types` в другом терминале. Сервер не применяет миграции самостоятельно.
+выполни `make frontend-build` отдельно перед `make server` или
+`make server-postgres`. Команды запуска собирают при необходимости OCaml-бинарник,
+но не frontend. Путь к bundle можно задать через `REALWORLD_FRONTEND_BUNDLE`;
+без доступного файла `/app.js` вернёт 503. Сервер не применяет миграции
+самостоятельно.
+
+`make openapi` создаёт локальный документ `_build/default/tools/openapi.json` из
+compiled endpoint graph без запуска сервера. `make frontend-types` обновляет
+сохранённый TypeScript-клиент из этого документа и сам вызывает `make openapi`.
+После изменения HTTP-контракта запусти `make frontend-types`, затем
+`make frontend-build`.
 
 | Переменная | Значение по умолчанию |
 | --- | --- |
@@ -84,15 +92,18 @@ Email и username принимаются в ASCII, нормализуются к
 
 ```sh
 make test       # unit и миграционные SQLite integration tests
+make frontend-types-check # сравнение сохранённого клиента с текущим OpenAPI
 make frontend-test # React component и generated-client tests
 make api-test   # временная БД, сервер, official RealWorld и project Hurl scenarios
 make test-postgres # PostgreSQL 18 кластер, repository integration и Hurl suite
 make check      # fmt, build, tests, Hurl, docs, package и schema check
 ```
 
-`make check` включает SQLite-проверки; PostgreSQL запускается отдельно командой
-`make test-postgres`. `make frontend-build` запускает TypeScript typecheck и
-собирает bundle; `make server` и `make api-test` тоже собирают frontend bundle.
+`make check` включает SQLite-проверки и `frontend-types-check`; PostgreSQL
+запускается отдельно командой `make test-postgres`. При расхождении
+`frontend-types-check` показывает diff и предлагает обновить клиент командой
+`make frontend-types`. `make frontend-build` запускает TypeScript typecheck и
+собирает bundle. `make api-test` и `make test-postgres` собирают его для Hurl.
 
 Официальные Hurl-сценарии сохранены в `test/hurl/official/`; их upstream
 revision указан в `UPSTREAM`. Дополнительные regression-сценарии проекта лежат

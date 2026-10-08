@@ -12,3 +12,21 @@
   uri)
  (preprocess
   (pps ppx_let)))
+
+(executable
+ (name openapi_export)
+ (modules openapi_export)
+ (libraries
+  base
+  realworld_application
+  realworld_domain
+  realworld_http
+  typed-endpoint-opium
+  yojson))
+
+(rule
+ (target openapi.json)
+ (action
+  (with-stdout-to
+   %{target}
+   (run %{exe:openapi_export.exe}))))
