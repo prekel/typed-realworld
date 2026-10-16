@@ -12,6 +12,7 @@ struct
   open Io.Let_syntax
 
   let error fields = Dto.Error_response.make fields
+  let error_response description = Response.json ~description (module Dto.Error_response)
 
   let slug =
     arg
@@ -42,8 +43,10 @@ struct
     |> accepts Request.empty
     |> returns
          (case `OK (Response.json (module Dto.Comments_response))
-          <|> case `Not_found (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Not_found (error_response "Article not found")
+          <|> case
+                `Internal_server_error
+                (error_response "Comment service is unavailable"))
     ==> fun slug ok missing unavailable_case context () ->
     let database = Contexts.Optional_auth.database context in
     let viewer_id = Contexts.Optional_auth.viewer_id context in
@@ -60,9 +63,11 @@ struct
     |> accepts (Request.json (module Dto.Comment_create_request))
     |> returns
          (case `Created (Response.json (module Dto.Comment_response))
-          <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
-          <|> case `Not_found (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Unprocessable_entity (error_response "Comment validation failed")
+          <|> case `Not_found (error_response "Article not found")
+          <|> case
+                `Internal_server_error
+                (error_response "Comment service is unavailable"))
     ==> fun slug created invalid missing unavailable_case context request_body ->
     let%bind body = Request_body.read request_body in
     match body with
@@ -85,9 +90,13 @@ struct
     |> accepts Request.empty
     |> returns
          (case `No_content (Response.empty ~description:"Comment deleted" ())
-          <|> case `Not_found (Response.json (module Dto.Error_response))
-          <|> case `Forbidden (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Not_found (error_response "Article or comment not found")
+          <|> case
+                `Forbidden
+                (error_response "Only the comment author can delete this comment")
+          <|> case
+                `Internal_server_error
+                (error_response "Comment service is unavailable"))
     ==>
     fun slug comment_id no_content missing forbidden_case unavailable_case context () ->
     let database = Contexts.Authenticated.database context in

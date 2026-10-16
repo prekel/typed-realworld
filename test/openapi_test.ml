@@ -100,7 +100,12 @@ let assert_nullable schema =
 
 let assert_optional properties field =
   let open Yojson.Safe.Util in
-  let required = properties |> member "required" |> to_list in
+  let required =
+    match properties |> member "required" with
+    | `List required -> required
+    | `Null -> []
+    | _ -> Stdlib.failwith "OpenAPI required must be an array when present"
+  in
   assert (
     not
       (List.exists required ~f:(fun name ->
@@ -122,6 +127,20 @@ let assert_response paths path_name meth status =
     |> member (Int.to_string status)
   in
   assert (not (Yojson.Safe.equal response `Null))
+;;
+
+let assert_response_description paths path_name meth status expected =
+  let open Yojson.Safe.Util in
+  let actual =
+    paths
+    |> member path_name
+    |> member meth
+    |> member "responses"
+    |> member (Int.to_string status)
+    |> member "description"
+    |> to_string
+  in
+  assert (String.equal actual expected)
 ;;
 
 let () =
@@ -234,7 +253,8 @@ let () =
     String.equal (schemas |> member "CommentId" |> member "format" |> to_string) "int64");
   assert (Int.equal (schemas |> member "CommentId" |> member "minimum" |> to_int) 1);
   assert (Int.equal (schemas |> member "ArticleSlug" |> member "minLength" |> to_int) 1);
-  assert (Int.equal (schemas |> member "PageLimit" |> member "minimum" |> to_int) 0);
+  assert (Yojson.Safe.equal (schemas |> member "PageLimit") `Null);
+  assert (Yojson.Safe.equal (schemas |> member "PageOffset") `Null);
   let list_parameters =
     paths |> member "/api/articles" |> member "get" |> member "parameters" |> to_list
   in
@@ -246,6 +266,35 @@ let () =
       String.equal
       parameter_names
       [ "tag"; "author"; "favorited"; "limit"; "offset" ]);
+  let parameter_schema name =
+    List.find_exn list_parameters ~f:(fun parameter ->
+      String.equal (parameter |> member "name" |> to_string) name)
+    |> member "schema"
+  in
+  assert (Yojson.Safe.equal (parameter_schema "limit" |> member "default") (`Int 20));
+  assert (Yojson.Safe.equal (parameter_schema "offset" |> member "default") (`Int 0));
+  assert_response_description
+    paths
+    "/api/articles"
+    "get"
+    400
+    "Request parameters or JSON body are invalid";
+  assert_response_description paths "/api/articles" "post" 413 "Request body is too large";
+  assert_response_description paths "/api/articles" "post" 415 "Unsupported media type";
+  assert_response_description paths "/api/articles" "post" 422 "Article validation failed";
+  assert_response_description paths "/api/articles/{slug}" "get" 404 "Article not found";
+  assert_response_description
+    paths
+    "/api/articles"
+    "get"
+    401
+    "Authentication token is invalid";
+  assert_response_description
+    paths
+    "/api/articles/feed"
+    "get"
+    401
+    "Authentication token is missing or invalid";
   List.iter
     [ "/api/users", "post", 201
     ; "/api/users", "post", 409

@@ -12,6 +12,7 @@ struct
   open Io.Let_syntax
 
   let error fields = Dto.Error_response.make fields
+  let error_response description = Response.json ~description (module Dto.Error_response)
 
   let slug =
     arg
@@ -45,13 +46,14 @@ struct
 
   let author_filter = username_filter "author" "Filter by author"
   let favorited_filter = username_filter "favorited" "Filter by users who favorited"
+  let default_page = Domain.Page.default
 
   let limit =
     arg
       "limit"
       (Endpoint_parameter.page_value
          (module Domain.Page.Limit)
-         ~schema_name:"PageLimit"
+         ~default:(Domain.Page.limit default_page)
          ~description:"Maximum number of articles"
          ())
   ;;
@@ -61,7 +63,7 @@ struct
       "offset"
       (Endpoint_parameter.page_value
          (module Domain.Page.Offset)
-         ~schema_name:"PageOffset"
+         ~default:(Domain.Page.offset default_page)
          ~description:"Number of articles to skip"
          ())
   ;;
@@ -77,7 +79,9 @@ struct
     |> accepts Request.empty
     |> returns
          (case `OK (Response.json (module Dto.Articles_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case
+                `Internal_server_error
+                (error_response "Article service is unavailable"))
     ==> fun tag author favorited limit offset ok unavailable_case context () ->
     let database = Contexts.Optional_auth.database context in
     let viewer_id = Contexts.Optional_auth.viewer_id context in
@@ -96,7 +100,7 @@ struct
     |> accepts Request.empty
     |> returns
          (case `OK (Response.json (module Dto.Articles_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Internal_server_error (error_response "Article feed is unavailable"))
     ==> fun limit offset ok unavailable_case context () ->
     let database = Contexts.Authenticated.database context in
     let user_id = Contexts.Authenticated.user_id context in
@@ -114,8 +118,10 @@ struct
     |> accepts Request.empty
     |> returns
          (case `OK (Response.json (module Dto.Article_response))
-          <|> case `Not_found (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Not_found (error_response "Article not found")
+          <|> case
+                `Internal_server_error
+                (error_response "Article service is unavailable"))
     ==> fun slug ok missing unavailable_case context () ->
     let database = Contexts.Optional_auth.database context in
     let viewer_id = Contexts.Optional_auth.viewer_id context in
@@ -132,8 +138,10 @@ struct
     |> accepts (Request.json (module Dto.Article_create_request))
     |> returns
          (case `Created (Response.json (module Dto.Article_response))
-          <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Unprocessable_entity (error_response "Article validation failed")
+          <|> case
+                `Internal_server_error
+                (error_response "Article service is unavailable"))
     ==> fun created invalid unavailable_case context body ->
     let%bind article = Request_body.read body in
     match article with
@@ -155,10 +163,12 @@ struct
     |> accepts (Request.json (module Dto.Article_update_request))
     |> returns
          (case `OK (Response.json (module Dto.Article_response))
-          <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
-          <|> case `Not_found (Response.json (module Dto.Error_response))
-          <|> case `Forbidden (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Unprocessable_entity (error_response "Article validation failed")
+          <|> case `Not_found (error_response "Article not found")
+          <|> case `Forbidden (error_response "Only the author can update this article")
+          <|> case
+                `Internal_server_error
+                (error_response "Article service is unavailable"))
     ==> fun slug ok invalid missing forbidden_case unavailable_case context body ->
     let%bind request = Request_body.read body in
     match request with
@@ -184,9 +194,11 @@ struct
     |> accepts Request.empty
     |> returns
          (case `No_content (Response.empty ~description:"Article deleted" ())
-          <|> case `Not_found (Response.json (module Dto.Error_response))
-          <|> case `Forbidden (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Not_found (error_response "Article not found")
+          <|> case `Forbidden (error_response "Only the author can delete this article")
+          <|> case
+                `Internal_server_error
+                (error_response "Article service is unavailable"))
     ==> fun slug no_content missing forbidden_case unavailable_case context () ->
     let database = Contexts.Authenticated.database context in
     let user_id = Contexts.Authenticated.user_id context in
@@ -219,8 +231,10 @@ struct
       |> accepts Request.empty
       |> returns
            (case `OK (Response.json (module Dto.Article_response))
-            <|> case `Not_found (Response.json (module Dto.Error_response))
-            <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+            <|> case `Not_found (error_response "Article not found")
+            <|> case
+                  `Internal_server_error
+                  (error_response "Article service is unavailable"))
     in
     declaration ==> fun slug ok missing unavailable_case context () ->
     let database = Contexts.Authenticated.database context in
@@ -244,7 +258,7 @@ struct
     |> accepts Request.empty
     |> returns
          (case `OK (Response.json (module Dto.Tags_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Internal_server_error (error_response "Tag service is unavailable"))
     ==> fun ok unavailable_case context () ->
     let database = Contexts.Public.database context in
     let%bind result = Articles.tags ~database in

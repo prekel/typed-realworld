@@ -12,6 +12,7 @@ struct
   open Io.Let_syntax
 
   let error fields = Dto.Error_response.make fields
+  let error_response description = Response.json ~description (module Dto.Error_response)
 
   let username =
     arg
@@ -32,9 +33,9 @@ struct
     |> accepts (Request.json (module Dto.Registration_request))
     |> returns
          (case `Created (Response.json (module Dto.User_response))
-          <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
-          <|> case `Conflict (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Unprocessable_entity (error_response "Registration validation failed")
+          <|> case `Conflict (error_response "Email or username is already taken")
+          <|> case `Internal_server_error (error_response "User service is unavailable"))
     ==> fun created invalid conflict unavailable_case context body ->
     let%bind registration = Request_body.read body in
     match registration with
@@ -61,9 +62,9 @@ struct
     |> accepts (Request.json (module Dto.Login_request))
     |> returns
          (case `OK (Response.json (module Dto.User_response))
-          <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
-          <|> case `Unauthorized (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Unprocessable_entity (error_response "Login request is invalid")
+          <|> case `Unauthorized (error_response "Email or password is invalid")
+          <|> case `Internal_server_error (error_response "User service is unavailable"))
     ==> fun ok invalid unauthorized unavailable_case context body ->
     let%bind credentials = Request_body.read body in
     match credentials with
@@ -93,8 +94,8 @@ struct
     |> accepts Request.empty
     |> returns
          (case `OK (Response.json (module Dto.User_response))
-          <|> case `Unauthorized (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Unauthorized (error_response "Authentication token is invalid")
+          <|> case `Internal_server_error (error_response "User service is unavailable"))
     ==> fun ok unauthorized unavailable_case context () ->
     let database = Contexts.Authenticated.database context in
     let issue = Contexts.Authenticated.issue context in
@@ -112,10 +113,10 @@ struct
     |> accepts (Request.json (module Dto.User_update_request))
     |> returns
          (case `OK (Response.json (module Dto.User_response))
-          <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
-          <|> case `Conflict (Response.json (module Dto.Error_response))
-          <|> case `Unauthorized (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Unprocessable_entity (error_response "User update validation failed")
+          <|> case `Conflict (error_response "Email or username is already taken")
+          <|> case `Unauthorized (error_response "Authentication token is invalid")
+          <|> case `Internal_server_error (error_response "User service is unavailable"))
     ==> fun ok invalid conflict unauthorized unavailable_case context body ->
     let%bind request = Request_body.read body in
     match request with
@@ -147,8 +148,8 @@ struct
     |> accepts Request.empty
     |> returns
          (case `OK (Response.json (module Dto.Profile_response))
-          <|> case `Not_found (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Not_found (error_response "Profile not found")
+          <|> case `Internal_server_error (error_response "User service is unavailable"))
     ==> fun username ok missing unavailable_case context () ->
     let database = Contexts.Optional_auth.database context in
     let viewer_id = Contexts.Optional_auth.viewer_id context in
@@ -165,9 +166,9 @@ struct
     |> accepts Request.empty
     |> returns
          (case `OK (Response.json (module Dto.Profile_response))
-          <|> case `Not_found (Response.json (module Dto.Error_response))
-          <|> case `Unprocessable_entity (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Not_found (error_response "Profile not found")
+          <|> case `Unprocessable_entity (error_response "Cannot follow this profile")
+          <|> case `Internal_server_error (error_response "User service is unavailable"))
     ==> fun username ok missing invalid unavailable_case context () ->
     let database = Contexts.Authenticated.database context in
     let user_id = Contexts.Authenticated.user_id context in
@@ -186,8 +187,8 @@ struct
     |> accepts Request.empty
     |> returns
          (case `OK (Response.json (module Dto.Profile_response))
-          <|> case `Not_found (Response.json (module Dto.Error_response))
-          <|> case `Internal_server_error (Response.json (module Dto.Error_response)))
+          <|> case `Not_found (error_response "Profile not found")
+          <|> case `Internal_server_error (error_response "User service is unavailable"))
     ==> fun username ok missing unavailable_case context () ->
     let database = Contexts.Authenticated.database context in
     let user_id = Contexts.Authenticated.user_id context in

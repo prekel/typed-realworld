@@ -61,7 +61,10 @@ module Make (Backend : Backend.S) = struct
       Guard.authenticate
         ~security:[ Security.require bearer ]
         ~status:`Unauthorized
-        ~response:(Response.json (module Dto.Error_response))
+        ~response:
+          (Response.json
+             ~description:"Authentication token is missing or invalid"
+             (module Dto.Error_response))
         ~check:(fun request ->
           let result =
             match token request with
@@ -87,7 +90,10 @@ module Make (Backend : Backend.S) = struct
     Guard.v
       ~security:[ []; Security.require bearer ]
       ~status:`Unauthorized
-      ~response:(Response.json (module Dto.Error_response))
+      ~response:
+        (Response.json
+           ~description:"Authentication token is invalid"
+           (module Dto.Error_response))
       ~check:(fun request ->
         let result =
           match token request with
@@ -119,5 +125,10 @@ module Make (Backend : Backend.S) = struct
           | Body_too_large _ -> "body", "is too large"
         in
         Dto.Error_response.make [ field, [ message ] ])
+    |> Decode_error_response.with_description (function
+      | `Bad_request -> Some "Request parameters or JSON body are invalid"
+      | `Request_entity_too_large -> Some "Request body is too large"
+      | `Unsupported_media_type -> Some "Unsupported media type"
+      | _ -> None)
   ;;
 end

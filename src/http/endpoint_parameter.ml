@@ -46,7 +46,8 @@ let string_value
 let page_value
       (type value)
       (module Value : Domain.Page.VALUE with type t = value)
-      ~schema_name
+      ?schema_name
+      ?default
       ~description
       ()
   =
@@ -54,9 +55,14 @@ let page_value
     Json_schema.Deriver.type_schema Json_schema.Deriver.Integer
     |> Json_schema.Deriver.with_minimum_int 0
   in
+  let schema =
+    match default with
+    | None -> schema
+    | Some default -> Json_schema.Deriver.with_default (`Int default) schema
+  in
   Parameter.v
     ~schema
-    ~schema_name
+    ?schema_name
     ~description
     ~of_string:(fun raw ->
       Value.of_string raw |> Result.of_option ~error:"expected a non-negative integer")
